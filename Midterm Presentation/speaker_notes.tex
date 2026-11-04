@@ -1,0 +1,134 @@
+\documentclass[]{0_aga-homework}
+
+\usepackage{bm}
+\usepackage{booktabs}
+\usepackage{microtype}
+\usepackage{enumitem}
+
+\setlist[itemize]{leftmargin=1.5em, itemsep=2pt, topsep=1.5pt}
+\setlist[enumerate]{leftmargin=1.5em, itemsep=2pt, topsep=1.5pt}
+
+\title{\textbf{Speaker Practice Notes (Strict 5-Minute Delivery)}\\
+\large \textbf{Bridging the Sim-to-Real Gap:} Reinforcement Learning for Recommender Systems via \textit{In Silico} LLM Personas}
+
+\date{October 20, 2026}
+
+\begin{document}
+
+\noindent\textbf{Delivery Target:} Strict 5-Minute Cap ($\approx$625 spoken words total $\cdot$ 135--140 words/min $\cdot$ $\sim$4.5--4.6 min delivery). \\
+\textbf{Structure:} Exact \textbf{1:1} match to each bullet on your slides. Bold text provides the visual anchor from the slide, integrated into a single, punchy spoken sentence with transitions.
+
+\bigskip
+\hrule
+\bigskip
+
+%=============================================================================
+\section*{Slide 1: Title Slide ($\sim$20 seconds $\cdot$ 49 words)}
+%=============================================================================
+\noindent\textit{Visual Scaffold: Title, Author, Yale S\&DS Affiliation, Date.}
+
+\begin{itemize}
+  \item \textbf{On Netflix,} recommendations optimize for immediate clicks, ignoring that user satisfaction is an evolving sequential journey.
+  \item \textbf{Our Thesis:} We use LLMs as \textit{in silico} human personas—generative world models to safely train continuous RL without live user churn.
+  \item \textbf{Transition:} Let's look at why current commercial recommenders struggle over longer horizons.
+\end{itemize}
+
+%=============================================================================
+\section*{Slide 2: Grounding: Recommendation as Sequential Control ($\sim$30 seconds $\cdot$ 73 words)}
+%=============================================================================
+\noindent\textit{Visual Scaffold: What Recommenders Do Today (Myopic ranking) vs. What We Aim to Solve (Long-horizon sequential policies).}
+
+\begin{itemize}
+  \item \textbf{Today's platforms optimize for immediate clicks,} scoring items greedily while ignoring user state transitions $\mathcal{P}(s_{t+1} \mid s_t, a_t)$.
+  \item \textbf{The Core Pitfall:} Repeated recommendations drive marginal utility to zero ($\frac{\partial U}{\partial n} \to 0$), causing genre fatigue and churn.
+  \item \textbf{Sequential control} optimizes discounted return $\sum \gamma^t R_t$, trading a click today for sustainable retention next week.
+  \item \textbf{The RL Dilemma:} Live exploration burns users, static logs suffer counterfactual bias, and toy simulators fail on humans.
+  \item \textbf{Transition:} Existing workarounds try to address this, but suffer fundamental flaws.
+\end{itemize}
+
+%=============================================================================
+\section*{Slide 3: Existing Paradigms \& The Simulation Gap ($\sim$35 seconds $\cdot$ 80 words)}
+%=============================================================================
+\noindent\textit{Visual Scaffold: Simulators \& Offline RL (RecSim, CQL) vs. Generative User Agents (Agent4Rec, The Missing Link).}
+
+\begin{itemize}
+  \item \textbf{Parametric Simulators (RecSim)} use rigid decay formulas; deep RL overfits to toy rules, failing on real humans.
+  \item \textbf{Offline RL (CQL)} penalizes unseen actions, collapsing exploration across large catalogs into merely cloning logs.
+  \item \textbf{LLM Agents} capture rich cultural priors, accurately mirroring real human rating distributions ($R^2 > 0.85$ on MovieLens).
+  \item \textbf{The Missing Link:} LLMs were never used as interactive RL environments because text generation latency ($\sim 450\,\text{ms}$) prohibits training.
+  \item \textbf{Transition:} We solve this by framing recommendation as a POMDP and eliminating text generation.
+\end{itemize}
+
+%=============================================================================
+\section*{Slide 4: Proposal: In Silico Personas in a POMDP ($\sim$40 seconds $\cdot$ 85 words)}
+%=============================================================================
+\noindent\textit{Visual Scaffold: Recommendation POMDP Grounded on MovieLens ($s_t$, $o_t$) and Proposed Interactive Training Loop ($\bm{a}_t$, LLM step, $R_t$).}
+
+\begin{itemize}
+  \item \textbf{Empirical Grounding:} Grounded in real MovieLens histories, retaining authentic genres, timestamps, and ratings.
+  \item \textbf{Hidden State ($s_t$):} Mood and fatigue are unobservable, requiring the policy to maintain an implicit belief state over history $o_t$.
+  \item \textbf{Observed History ($o_t$):} The policy conditions strictly on observable profile embeddings and interaction sequences.
+  \item \textbf{Continuous Action ($\bm{a}_t$):} Continuous vectors mapped via MIPS avoid discrete action branching, enabling efficient SAC optimization.
+  \item \textbf{LLM Persona Step:} The persona evaluates the item, outputting a predicted rating and a session continuation flag ($c_t \in \{0, 1\}$).
+  \item \textbf{Step Reward ($R_t$):} Balances immediate ratings with session retention, penalizing recommendations that exhaust users.
+  \item \textbf{Transition:} Next, we validate persona fidelity before running policy training.
+\end{itemize}
+
+%=============================================================================
+\section*{Slide 5: Method: Quantifying \& Validating User Personas ($\sim$35 seconds $\cdot$ 87 words)}
+%=============================================================================
+\noindent\textit{Visual Scaffold: Proposed Behavioral Signatures (Genre preferences, satiation/fatigue, popularity) and Pre-RL Validation (Calibration, alignment, stability).}
+
+\begin{itemize}
+  \item \textbf{Genre Preferences} are grounded in empirical genre entropy $H(G) = -\sum p_g \log p_g$ from logs.
+  \item \textbf{Satiation and fatigue} are captured organically via attention over history, without hand-coded formulas.
+  \item \textbf{Popularity Tendency} models user preference for mainstream hits versus niche indie titles.
+  \item \textbf{Rating Calibration} confirms simulated ratings match test distributions via calibration curves and MSE.
+  \item \textbf{Distributional Alignment} measures preference overlap with real histories using Wasserstein distance.
+  \item \textbf{Temporal Stability} confirms consistent rollouts across random seeds to prevent behavioral drift.
+  \item \textbf{Transition:} Calibrated personas solve realism; now we tackle the computational inference bottleneck.
+\end{itemize}
+
+%=============================================================================
+\section*{Slide 6: Fast Token-Logit Scoring \& KV Caching ($\sim$35 seconds $\cdot$ 81 words)}
+%=============================================================================
+\noindent\textit{Visual Scaffold: Proposed Zero-Generation Token Scoring (Single pass formula) and Prefix Caching Across Parallel Archetypes ($100\%$ cache hit, $<12\,\text{ms}$ latency).}
+
+\begin{itemize}
+  \item \textbf{Zero-Generation Scoring:} Setting \text{\texttt{max\_tokens}}=1 forces the rating as the next token, bypassing text generation entirely.
+  \item \textbf{Exact Probabilities:} Softmax over logits gives a closed-form expected rating $\mathbb{E}[r_t]$ with zero parsing failures.
+  \item \textbf{Archetype Clustering} allows parallel worker environments to share identical system prompts.
+  \item \textbf{vLLM Prefix Caching} pins persona prefixes in GPU VRAM, eliminating redundant prompt computation.
+  \item \textbf{Expected Throughput ($<12\,\text{ms}$):} Slashes latency by $>35\times$, enabling $10^5$ RL steps in 20 minutes on Bouchet HPC.
+  \item \textbf{Transition:} This throughput enables a rigorous comparative benchmark.
+\end{itemize}
+
+%=============================================================================
+\section*{Slide 7: Evaluation Protocol \& Planned Experiments ($\sim$35 seconds $\cdot$ 86 words)}
+%=============================================================================
+\noindent\textit{Visual Scaffold: Planned Three-Way Benchmark (RecSim vs. CQL vs. Generative SAC in $\mathcal{M}_{\text{LLM}}$) and Planned Off-Policy Real Evaluation (Sim-to-real transfer, KuaiRec fallback).}
+
+\begin{itemize}
+  \item \textbf{Parametric Baseline:} Continuous SAC in RecSim measures policy vulnerability to exploiting hand-crafted simulator rules.
+  \item \textbf{Offline Baseline:} CQL benchmarks state-of-the-art offline RL trained directly on static logs.
+  \item \textbf{Generative Setup:} Evaluates SAC trained against our high-throughput generative personas ($\mathcal{M}_{\text{LLM}}$).
+  \item \textbf{Sim-to-Real Transfer} tests whether LLM training tightens the transfer error bound on held-out user trajectories.
+  \item \textbf{KuaiRec Fallback:} A fully observed matrix serves as an uncorrupted counterfactual oracle if MovieLens exhibits high variance.
+  \item \textbf{Transition:} Let's conclude with our core takeaways and roadmap.
+\end{itemize}
+
+%=============================================================================
+\section*{Slide 8: Summary: Key Takeaways \& Planned Roadmap ($\sim$35 seconds $\cdot$ 85 words)}
+%=============================================================================
+\noindent\textit{Visual Scaffold: Project Summary: What We Propose (Core problem, approach, key enabler) and Next Steps \& Execution Plan (vLLM setup, baselines, SAC training).}
+
+\begin{itemize}
+  \item \textbf{The Core Problem:} Toy equations fail on real humans, creating a severe sim-to-real gap.
+  \item \textbf{The Approach:} We recast recommendation as a POMDP where grounded LLM personas act as dynamic simulators.
+  \item \textbf{Key Enabler:} Sub-12ms latency makes online continuous RL computationally practical on standard HPC hardware.
+  \item \textbf{HPC Deployment:} First, deploy vLLM on Yale's Bouchet cluster and validate persona calibration curves.
+  \item \textbf{Baselines:} Benchmark continuous SAC in RecSim against offline CQL.
+  \item \textbf{Policy Evaluation:} Train SAC in $\mathcal{M}_{\text{LLM}}$ and measure sim-to-real transfer on real logs.
+\end{itemize}
+
+\end{document}

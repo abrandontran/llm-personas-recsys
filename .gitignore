@@ -1,0 +1,62 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C++/CUDA builds
+*.so
+*.o
+*.obj
+
+# Environments & Packages
+.venv/
+venv/
+env/
+ENV/
+build/
+dist/
+*.egg-info/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Datasets and raw downloads (keep repo under GitHub limits)
+data/
+*.dat
+*.tar.gz
+*.zip
+*.parquet
+*.h5
+
+# Model weights & large binary checkpoints
+checkpoints/
+*.pt
+*.pth
+*.onnx
+*.bin
+
+# LaTeX auxiliary files (keep .tex and .pdf)
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.nav
+*.out
+*.snm
+*.synctex.gz
+*.toc
+
+# Antigravity & IDE local configs
+.gemini/
+.vscode/
+.idea/
+
+# OS specific files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+

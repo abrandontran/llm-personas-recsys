@@ -1,0 +1,207 @@
+\documentclass[handout]{beamer}
+\usetheme{PomonaMath}
+
+\usepackage{booktabs}
+\usepackage{bm}
+
+\setlength{\wideitemsep}{1.5pt}
+
+\title[In Silico LLM Personas for RecSys]{\textbf{Bridging the Sim-to-Real Gap:} Reinforcement Learning for Recommender Systems via \textit{In Silico} LLM Personas}
+\author{Brandon Tran}
+\institute[S\&DS]{Yale University}
+\date{October 20, 2026}
+
+\begin{document}
+
+\maketitle
+
+%=============================================================================
+\section{Motivation}
+%=============================================================================
+
+% Slide 1: Grounding the RecSys Problem
+\begin{frame}{Grounding: Recommendation as Sequential Control}
+  \begin{block}{What Recommenders Do Today: Myopic Ranking}
+    \small
+    \begin{itemize}
+      \item Platforms (Netflix, TikTok, YouTube) optimize for \textbf{immediate clicks or watch time}.
+      \item \textbf{The Core Pitfall:} Greedy ranking traps users in repetitive filter bubbles, triggers rapid genre fatigue, and accelerates session abandonment.
+    \end{itemize}
+  \end{block}
+
+  \pause
+  \vspace{-0.05cm}
+
+  \begin{alertblock}{What We Aim to Solve: Long-Horizon Sequential Policies}
+    \small
+    \begin{itemize}
+      \item We formulate recommendation as a \textbf{sequential decision process}: balancing immediate engagement with long-term retention (managing satiation, encouraging serendipity).
+      \item \textbf{The RL Dilemma:} RL is built for this, but live A/B testing is too risky, offline logs have exposure bias, and toy simulators have a severe \textbf{sim-to-real gap}.
+    \end{itemize}
+  \end{alertblock}
+\end{frame}
+
+% Slide 2: Existing Paradigms (Headers and bullets with vertical divider)
+\begin{frame}{Existing Paradigms \& The Simulation Gap}
+  \vspace{0.05cm}
+  \begin{columns}[T,onlytextwidth]
+    \begin{column}{0.47\textwidth}
+      {\textbf{\textcolor{PomonaNavy}{\large Simulators \& Offline RL}}}\centering
+      \vspace{0.15cm}
+      \small
+      \begin{itemize}
+        \item \textbf{Parametric Simulators (RecSim):} Hand-crafted linear decay rules; policies overfit and fail on real users (\textit{sim-to-real gap}).
+        \vspace{0.12cm}
+        \item \textbf{Offline RL (e.g., CQL):} Penalizes unseen actions in static logs; suffers high variance and pessimism on sparse data.
+      \end{itemize}
+    \end{column}
+
+    % Perfectly Centered Vertical Divider
+    \hfill\vrule\hfill
+
+    \begin{column}{0.47\textwidth}
+      \pause
+      {\textbf{\textcolor{PomonaNavy}{\large Generative User Agents}}}\centering
+      \vspace{0.15cm}
+      \small
+      \begin{itemize}
+        \item \textbf{LLM Agents (Agent4Rec):} Encode rich cultural priors and simulate believable human ratings from history.
+        \vspace{0.12cm}
+        \pause
+        \item \textbf{The Missing Link:} Treated strictly as \textbf{static evaluation benchmarks}, never interactive RL environments due to latency ($\sim 450\,\text{ms}$/step).
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+
+%=============================================================================
+\section{Proposed Framework}
+%=============================================================================
+
+% Slide 3: Proposed Framework
+\begin{frame}{Proposal: \textit{In Silico} Personas in a POMDP}
+  \begin{block}{Recommendation POMDP (Grounded on MovieLens)}
+    \small
+    \begin{itemize}
+      \item \textbf{Empirical Grounding:} Environment grounded on MovieLens histories with rich metadata (titles, genres, ratings).
+      \item \textbf{Hidden State ($s_t$):} Long-term user taste profile + transient session fatigue (unobservable).
+      \item \textbf{Observed History ($o_t$):} Latent user profile embedding + recent interaction history.
+    \end{itemize}
+  \end{block}
+
+  \pause
+  \vspace{-0.15cm}
+
+  {\textbf{\textcolor{PomonaNavy}{Proposed Interactive Training Loop:}}}
+  \small
+  \begin{enumerate}
+    \item \textbf{Continuous Action:} Policy outputs latent vector $\bm{a}_t \to$ mapped to items via cosine similarity.
+    \item \textbf{LLM Persona Step:} Processes context \& history $\to$ returns rating $r_t \in \{1,\dots,5\}$ and retention $c_t \in \{0, 1\}$.
+    \item \textbf{Step Reward:} $R_t = \text{Normalized Rating} + 0.25 \cdot \mathbb{I}(c_t = 1)$ (satisfaction + retention).
+  \end{enumerate}
+\end{frame}
+
+% Slide 4: Persona Grounding
+\begin{frame}{Method: Quantifying \& Validating User Personas}
+  \begin{block}{Proposed Behavioral Signatures}
+    \small
+    Condition personas on real user history across 3 conceptual dimensions:
+    \begin{itemize}
+      \item \textbf{Genre Preferences:} Empirical preference distribution over film genres.
+      \item \textbf{Satiation \& Fatigue:} Modeled sensitivity to repeated recommendations.
+      \item \textbf{Popularity Tendency:} Preference for mainstream hits vs. niche indie cinema.
+    \end{itemize}
+  \end{block}
+
+  \pause
+  \vspace{0.02cm}
+
+  {\textbf{\textcolor{PomonaNavy}{Pre-RL Fidelity Validation (Planned on Held-Out Logs):}}}
+  \small
+  \begin{itemize}
+    \item \textbf{Rating Calibration:} Verify simulated ratings match real test rating distributions.
+    \item \textbf{Distributional Alignment:} Quantify preference overlap with real user choices.
+    \item \textbf{Temporal Stability:} Measure consistency across rollouts to ensure personas do not drift.
+  \end{itemize}
+\end{frame}
+
+% Slide 5: Fast Computation
+\begin{frame}{Fast Token-Logit Scoring \& KV Caching}
+  \begin{alertblock}{Proposed Zero-Generation Token Scoring}
+    \small
+    \begin{itemize}
+      \item Format prompt so the very next token is strictly the rating $\in \{"1",\dots,"5"\}$.
+      \item In a \textbf{single forward pass} ($\text{\texttt{max\_tokens}}=1$), compute exact probabilities:
+        \vspace{-0.25cm}
+        \[
+          P_{\text{LLM}}(r_t = k \mid \text{context}) = \frac{\exp(\ell_k / \tau)}{\sum_{j=1}^5 \exp(\ell_j / \tau)}, \quad k \in \{1,\dots,5\}
+        \]
+        \vspace{-0.45cm}
+    \end{itemize}
+  \end{alertblock}
+
+  \pause
+  \vspace{0.05cm}
+
+  \begin{block}{Proposed Prefix Caching Across Parallel User Archetypes}
+    \small
+    \begin{itemize}
+      \item We plan to cluster users into representative archetypes pinned to parallel environments.
+      \item System prompt KV cache hit rate = $100\%$ via \texttt{vLLM} prefix caching.
+      \item \textbf{Expected Throughput:} Slashes latency from \textbf{$\sim 450\,\text{ms} \to <12\,\text{ms}$} ($>35\times$ speedup), making $10^6$ online RL steps computationally feasible on Yale's Bouchet HPC.
+    \end{itemize}
+  \end{block}
+\end{frame}
+
+%=============================================================================
+\section{Evaluation \& Plan}
+%=============================================================================
+
+% Slide 6: Evaluation
+\begin{frame}{Evaluation Protocol \& Planned Experiments}
+  \begin{block}{Planned Three-Way Policy Benchmark}
+    \small
+    We will train and compare three distinct paradigms:
+    \begin{itemize}
+      \item \textbf{Parametric Baseline:} Continuous-action SAC trained in \textbf{RecSim} (hand-crafted rules).
+      \item \textbf{Offline Baseline:} \textbf{Conservative Q-Learning (CQL)} trained on historical logs.
+      \item \textbf{Proposed Generative Setup:} Continuous-action SAC trained in \textbf{$\mathcal{M}_{\text{LLM}}$} with in silico personas.
+    \end{itemize}
+  \end{block}
+
+  \pause
+  \vspace{0.1cm}
+
+  {\textbf{\textcolor{PomonaNavy}{Planned Off-Policy Real Evaluation:}}}
+  \small
+  \begin{itemize}
+    \item \textbf{Sim-to-Real Transfer:} Evaluate all policies on held-out user trajectories to test whether LLM personas reduce downstream policy degradation.
+    \item \textbf{Dense Matrix Fallback:} Use fully observed interaction matrices (KuaiRec) if MovieLens test splits exhibit high evaluation variance.
+  \end{itemize}
+\end{frame}
+
+% Slide 7: Summary Slide
+\begin{frame}{Summary: Key Takeaways \& Planned Roadmap}
+  \begin{block}{Project Summary: What We Propose}
+    \small
+    \begin{itemize}
+      \item \textbf{Core Problem:} Classical RecSys simulators rely on toy rules that fail to capture human behavior, creating a severe sim-to-real gap.
+      \item \textbf{The Approach:} Recast recommendation as a POMDP where empirical-grounded LLM personas act as dynamic human simulators.
+      \item \textbf{Key Enabler:} Single-pass token-logit scoring + prefix caching ($<12\,\text{ms}$) makes continuous online RL training computationally practical.
+    \end{itemize}
+  \end{block}
+
+  \pause
+  \vspace{0.08cm}
+
+  {\textbf{\textcolor{PomonaNavy}{Next Steps \& Execution Plan:}}}
+  \small
+  \begin{enumerate}
+    \item Deploy \texttt{vLLM} on Yale's Bouchet HPC and validate persona fidelity on MovieLens.
+    \item Train baseline agents in RecSim and offline CQL.
+    \item Train SAC inside $\mathcal{M}_{\text{LLM}}$ and evaluate sim-to-real policy transfer.
+  \end{enumerate}
+\end{frame}
+
+\end{document}

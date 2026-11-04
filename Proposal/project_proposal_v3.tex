@@ -1,0 +1,237 @@
+\documentclass{article}
+
+% Pass options to natbib before loading neurips_2026
+\PassOptionsToPackage{numbers, compress}{natbib}
+\usepackage[preprint]{neurips_2026}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsfonts, amsmath, amssymb, amsthm}
+\usepackage{nicefrac}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{bm}
+\usepackage{enumitem}
+\usepackage{array}
+
+% Micro-tuned list, equation, and float spacing to fit cleanly within 4 pages
+\setlist{leftmargin=1.3em, topsep=0.8pt, itemsep=0.8pt, parsep=0.4pt}
+\AtBeginDocument{%
+  \setlength{\abovedisplayskip}{2.8pt plus 1pt minus 1pt}%
+  \setlength{\belowdisplayskip}{2.8pt plus 1pt minus 1pt}%
+  \setlength{\textfloatsep}{4.5pt plus 1pt minus 1pt}%
+  \setlength{\intextsep}{3.5pt plus 1pt minus 1pt}%
+}
+
+\begin{filecontents*}{references.bib}
+@article{ie2019recsim,
+  title={RecSim: A Configurable Simulation Platform for Recommender Systems},
+  author={Ie, Eugene and Hsu, Chih-wei and Mladenov, Martin and Jain, Vihan and Narvekar, Sanmit and Wang, Jing and Wu, Rui and Boutilier, Craig},
+  journal={arXiv preprint arXiv:1909.04847},
+  year={2019}
+}
+@article{levine2020offline,
+  title={Offline Reinforcement Learning: Tutorial, Review, and Perspectives on Open Problems},
+  author={Levine, Sergey and Kumar, Aviral and Tucker, George and Fu, Justin},
+  journal={arXiv preprint arXiv:2005.01643},
+  year={2020}
+}
+@inproceedings{park2023generative,
+  title={Generative Agents: Interactive Simulacra of Human Behavior},
+  author={Park, Joon Sung and O'Brien, Joseph C and Cai, Carrie J and Morris, Meredith Ringel and Liang, Percy and Bernstein, Michael S},
+  booktitle={Proceedings of the 36th Annual ACM Symposium on User Interface Software and Technology (UIST)},
+  year={2023}
+}
+@article{wang2023generative,
+  title={Generative Recommendation: Towards Next-generation Recommender Paradigm},
+  author={Wang, Wenjie and Lin, Xinyu and Feng, Fuli and He, Xiangnan and Chua, Tat-Seng},
+  journal={arXiv preprint arXiv:2304.03516},
+  year={2023}
+}
+@inproceedings{zhang2024agent4rec,
+  title={On Generative Agents in Recommendation},
+  author={Zhang, An and Chen, Yuxin and Sheng, Leheng and Wang, Xiang and Chua, Tat-Seng},
+  booktitle={Proceedings of the 47th International ACM SIGIR Conference on Research and Development in Information Retrieval},
+  year={2024}
+}
+@article{wang2024user,
+  title={User Behavior Simulation with Large Language Model based Agents},
+  author={Wang, Lei and Zhang, Jingsen and Yang, Hao and Chen, Zhiyuan and Tang, Jiakai and Zhang, Zeyu and Chen, Xu and Lin, Yankai and Song, Ruihua and Zhao, Wayne Xin and others},
+  journal={ACM Transactions on Information Systems},
+  year={2024}
+}
+@inproceedings{kumar2020conservative,
+  title={Conservative Q-Learning for Offline Reinforcement Learning},
+  author={Kumar, Aviral and Zhou, Aurick and Tucker, George and Levine, Sergey},
+  booktitle={Advances in Neural Information Processing Systems (NeurIPS)},
+  volume={33},
+  pages={1179--1191},
+  year={2020}
+}
+@inproceedings{gao2022kuairec,
+  title={KuaiRec: A Fully-observed Dataset and Insights for Evaluating Recommender Systems},
+  author={Gao, Chongming and Li, Shijun and Lei, Wenqiang and Chen, Jiawei and Li, Biao and Jiang, Peng and He, Xiangnan and Mao, Jiaxin and Chua, Tat-Seng},
+  booktitle={Proceedings of the 31st ACM International Conference on Information \& Knowledge Management (CIKM)},
+  pages={540--550},
+  year={2022}
+}
+@article{kearns2002near,
+  title={Near-Optimal Reinforcement Learning in Polynomial Time},
+  author={Kearns, Michael and Singh, Satinder},
+  journal={Machine Learning},
+  volume={49},
+  number={2},
+  pages={209--232},
+  year={2002}
+}
+\end{filecontents*}
+
+\title{Robust Reinforcement Learning for Recommender Systems via \textit{In Silico} LLM Personas}
+
+\author{%
+  Brandon Tran \\
+  Department of Statistics and Data Science, Yale University \\
+  \texttt{brandon.tran@yale.edu} \\
+}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+A fundamental bottleneck in applying Reinforcement Learning (RL) to Recommender Systems (RecSys) is the reliance on rigid statistical simulators that fail to capture the complex, non-stationary nature of human preferences, creating a severe simulation-to-reality (sim-to-real) gap. Conversely, training exploratory policies via live A/B testing risks degrading user experience, while offline RL suffers from distributional shift across large item catalogs. We propose an \textit{in silico} generative simulation framework in which quantized Large Language Models (LLMs) conditioned on empirical user histories act as parameterized user personas within a Partially Observable Markov Decision Process (POMDP). We formalize a quantitative behavioral signature to evaluate persona fidelity, measuring genre alignment, exploration entropy, satiation decay, and popularity conformity, and introduce a single-pass token-logit extraction mechanism that makes online RL training computationally tractable. Responding to peer review, we elevate the fully-observed KuaiRec dataset to a co-primary benchmark alongside MovieLens-1M to ensure counterfactually valid off-policy evaluation, introduce structured personalization ablations to rule out pretraining memorization, and formally specify the continuous-action Soft Actor-Critic (SAC) architecture. We evaluate whether SAC agents trained against generative LLM personas achieve lower policy degradation on real held-out trajectories than agents trained in classical parametric simulators.
+\end{abstract}
+
+\section{Introduction and Motivation}
+Sequential recommender systems must balance immediate user engagement with long-term utility, such as mitigating genre fatigue, preventing session churn, and encouraging serendipitous discovery. While Reinforcement Learning (RL) provides a principled mathematical framework for optimizing long-horizon cumulative rewards, deploying RL in real-world recommendation engines faces three compounding obstacles:
+\begin{enumerate}
+    \item \textbf{Sim-to-Real Gap in Parametric Simulators:} Training online RL agents requires millions of interactions. Classical simulators like RecSim \cite{ie2019recsim} rely on hand-crafted, low-dimensional latent transition rules (e.g., linear topic fatigue or static matrix factorization scores). Deep RL policies rapidly overfit to and exploit these parametric artifacts, learning brittle strategies that fail under real human behavior.
+    \item \textbf{Extrapolation Error in Offline RL:} Offline RL algorithms such as Conservative Q-Learning (CQL) \cite{kumar2020conservative, levine2020offline} learn directly from logged historical data. However, recommendation logs exhibit severe exposure bias (missing-not-at-random feedback), and evaluating out-of-distribution trajectories across thousands of candidate items induces high variance or overly pessimistic policies.
+    \item \textbf{Nuanced Human State Dynamics:} Real users exhibit complex semantic preferences, context-dependent satiation, and asymmetric sensitivity to poor recommendations that simple vector inner products fail to capture.
+\end{enumerate}
+
+Recent breakthroughs in Generative Agents \cite{park2023generative} and LLM-based user simulation \cite{wang2023generative, zhang2024agent4rec, wang2024user} show that pre-trained language models encode rich priors over human cultural consumption. Yet, existing studies largely treat LLM agents as static evaluation benchmarks rather than interactive RL training environments due to two unresolved challenges: \textit{(i) How do we rigorously quantify whether an LLM persona faithfully mirrors a real user's behavioral dynamics?} and \textit{(ii) How can we execute online RL training loops without being bottlenecked by autoregressive generation latency?} We address both questions by building a high-throughput \texttt{Gymnasium} environment backed by quantized LLMs (Llama-3-8B-Instruct), formalizing multi-dimensional persona alignment metrics, and training continuous-control SAC agents to bridge the sim-to-real gap.
+
+\section{Goal and Mathematical Setup}
+Our primary objective is to test whether RL policies trained in an LLM-driven generative simulator ($\mathcal{M}_{\text{LLM}}$) transfer more robustly to held-out real-world trajectories ($\mathcal{M}_{\text{tgt}}$) than policies trained in a classical statistical simulator ($\mathcal{M}_{\text{stat}}$) or learned purely offline via CQL.
+
+\subsection{The Recommendation Task and SAC Architecture}
+We evaluate sequential recommendation across two complementary benchmarks: (1) \textbf{MovieLens-1M} (6,040 users, 3,706 movies, 1M ratings), providing rich semantic metadata (titles, release years, genres, synopses) to leverage LLM world knowledge, and (2) \textbf{KuaiRec} \cite{gao2022kuairec} (1,411 users, 3,327 items, $99.6\%$ matrix density), which provides a fully-observed interaction ground truth that eliminates counterfactual exposure bias in off-policy evaluation.
+\begin{itemize}
+    \item \textbf{Continuous Action Space and SAC Architecture:} A user $u \in \mathcal{U}$ enters a session of horizon $H = 20$. To avoid intractable discrete action spaces over thousands of items, we pre-compute item representations $\mathbf{E} \in \mathbb{R}^{|\mathcal{I}| \times d}$ ($d=32$) via regularized SVD on training interactions. At step $t$, the policy outputs a continuous action $\bm{a}_t \in [-1, 1]^d$, mapped to an unconsumed item $i_t \in \mathcal{I} \setminus \mathcal{I}_{u, <t}$ via Maximum Cosine Similarity during rollouts (inducing a Boltzmann distribution $\pi_e(i \mid o_t) \propto \exp(\cos(\bm{a}_t, \bm{e}_i)/\tau_{\pi})$ for off-policy evaluation):
+    \begin{equation}
+        i_t = \arg\max_{i \in \mathcal{I} \setminus \mathcal{I}_{u, <t}} \frac{\bm{a}_t^\top \bm{e}_i}{\|\bm{a}_t\|_2 \|\bm{e}_i\|_2}.
+    \end{equation}
+    Addressing peer review concerns regarding overparameterization, our Soft Actor-Critic (SAC) model employs standard, compact feedforward networks rather than high-dimensional heads. The \textbf{Actor Network} $\pi_{\theta}(\bm{a}_t \mid o_t)$ is a 2-layer MLP ($[256, 256]$ hidden units, LayerNorm, ReLU) mapping state observation $o_t \in \mathbb{R}^{202}$ to Gaussian parameters $(\bm{\mu}_{\theta}, \log \bm{\sigma}_{\theta}) \in \mathbb{R}^{32 \times 2}$, squashed via $\tanh$ into $[-1, 1]^{32}$. The \textbf{Twin Critic Networks} $Q_{\phi_1}, Q_{\phi_2}(o_t, \bm{a}_t)$ are identical 2-layer MLPs $[256, 256]$ mapping concatenated state-actions $(o_t, \bm{a}_t) \in \mathbb{R}^{234} \to \mathbb{R}$. Note that the 32 clustered archetypes (Section 3.2) serve strictly as parallel vectorized environment instances in the rollout batch, not network outputs.
+    \item \textbf{User Feedback and Endogenous Session Retention:} Given item $i_t$ (encoded with Title, Year, Genres, and a 1-sentence synopsis), the persona returns an explicit rating $r_t \in \{1, \dots, 5\}$ and continuation flag $c_t \in \{0, 1\}$. Rather than imposing an arbitrary external rule, session continuation is endogenous to the persona's evolving satisfaction: $c_t = 1 \iff \mathbb{E}[r_t] \ge \tau_{\text{quit}}(u)$, where $\tau_{\text{quit}}(u)$ matches the user's historical 15th-percentile rating threshold (or two consecutive $\le 2$-star outcomes). The composite reward balances satisfaction and retention ($\alpha = 0.25$):
+    \begin{equation}
+        R(o_t, \bm{a}_t) = \underbrace{\frac{r_t - 3}{2}}_{\text{Normalized Rating } \in [-1, 1]} + \alpha \cdot \mathbb{I}(c_t = 1).
+    \end{equation}
+\end{itemize}
+
+\subsection{POMDP Formulation}
+Because internal user fatigue and evolving latent tastes are unobservable to the recommender, we formulate the environment as a POMDP defined by the tuple $\mathcal{M} = (\mathcal{S}, \mathcal{A}, \mathcal{O}, \mathcal{T}, \mathcal{R}, \Omega, \gamma)$:
+\begin{itemize}
+    \item \textbf{Hidden State Space ($\mathcal{S}$):} The underlying state $s_t = (\psi_u, \bm{z}_t)$ comprises the user's time-invariant persona $\psi_u \in \Psi$ (long-term taste profile) and transient session state $\bm{z}_t$ (short-term genre satiation and cumulative dissatisfaction).
+    \item \textbf{Observation Space ($\mathcal{O}$):} The agent observes history state $o_t = (\bm{u}_{\text{emb}}, \mathcal{H}_t) \in \mathbb{R}^{d + K(d+2)} = \mathbb{R}^{202}$, combining static user embedding $\bm{u}_{\text{emb}} \in \mathbb{R}^{32}$ and the last $K=5$ interaction tuples $\mathcal{H}_t = \{(\bm{e}_{i_{t-k}}, r_{t-k}, \Delta t_k)\}_{k=1}^5$.
+    \item \textbf{Transition Dynamics ($\mathcal{T}$):} In $\mathcal{M}_{\text{stat}}$ (RecSim), transitions follow a hard-coded parametric decay rule where genre affinity drops exponentially upon repeated exposure. In $\mathcal{M}_{\text{LLM}}$, transitions are governed implicitly by the evolving context window and token probability distribution of the persona-conditioned LLM.
+\end{itemize}
+
+\subsection{Operationalizing Personas and Disentangling Memorization}
+To address peer review concerns regarding data contamination and pretraining memorization (e.g., Llama-3 recalling MovieLens titles directly), we structure prompt encoding and introduce a 3-way personalization ablation suite:
+
+\textbf{1. Semantic Prompt Encoding:} Candidate movies are presented to the LLM not as isolated titles, but as structured semantic records: \texttt{[Title: \{title\} | Year: \{year\} | Genres: \{genres\} | Synopsis: \{synopsis\}]}. This forces the model to evaluate thematic and narrative alignment rather than relying exclusively on memorized global popularity.
+
+\textbf{2. Quantitative Behavioral Signature $\bm{\phi}(u)$:} Any interaction trajectory (real $\mathcal{D}_{u}^{\text{eval}}$ or simulated $\hat{\mathcal{D}}_{u}^{\text{LLM}}$) maps to a 4-component vector $\bm{\phi}(u) = [\bm{\mu}_u, H_u, \lambda_u, \rho_u]^\top$: (1) \textbf{Genre Simplex} $\bm{\mu}_u \in \Delta^{G-1}$ (rating-weighted distribution over $G$ genres), (2) \textbf{Exploration Entropy} $H_u = -\sum \mu_{u,g} \log \mu_{u,g}$, (3) \textbf{Satiation Decay} $\lambda_u \in \mathbb{R}$ (OLS slope of ratings against same-genre repetition in a 3-step window), and (4) \textbf{Popularity Conformity} $\rho_u \in [-1, 1]$ (Spearman correlation with item log-popularity).
+
+\textbf{3. Personalization Ablation Suite:} To prove policy gains stem from authentic user dynamics rather than pretraining memorization, we evaluate three persona variants: (a) \textbf{Full Persona ($\psi_u$)} with historical ratings and signature $\bm{\phi}(u)$; (b) \textbf{Generic Persona ($\psi_{\text{generic}}$)} with neutral instructions without history (\textit{"You are an average viewer"}); and (c) \textbf{Unconditioned LLM ($\psi_{\emptyset}$)} querying bare item context to isolate pretraining popularity bias.
+
+\textbf{4. Pre-RL Persona Fidelity Metrics:} Prior to RL training, we validate $\mathcal{M}_{\text{LLM}}$ against held-out real trajectories $\mathcal{D}_u^{\text{eval}}$ across three axes: (1) \textbf{Predictive Accuracy} (RMSE and NDCG@10 on observed items), (2) \textbf{Distributional Alignment} (Jensen-Shannon Divergence $D_{\text{JS}}(\bm{\mu}_u^{\text{real}} \parallel \bm{\mu}_u^{\text{LLM}})$ and 1-Wasserstein Distance $W_1(P_u^{\text{real}}(r), P_u^{\text{LLM}}(r))$), and (3) \textbf{Temporal Consistency Index} $\text{CI}(u) = \cos(\bm{\phi}_{1:H/2}(u), \bm{\phi}_{H/2+1:H}(u))$ across multi-step rollouts to ensure resistance to behavioral drift.
+
+\subsection{Theoretical Motivation via the Simulation Lemma}
+Reducing the POMDP to its observable history-MDP over $o \in \mathcal{O}$, the Simulation Lemma \cite{kearns2002near} bounds policy transfer gap between the target environment $\mathcal{M}_{\text{tgt}}$ and simulator $\mathcal{M}_{\text{sim}} \in \{\mathcal{M}_{\text{stat}}, \mathcal{M}_{\text{LLM}}\}$ along target visitation $d^{\pi}_{\mathcal{M}_{\text{tgt}}}$:
+\begin{equation}
+    \left| V^{\pi}_{\mathcal{M}_{\text{tgt}}} - V^{\pi}_{\mathcal{M}_{\text{sim}}} \right| \le \frac{1}{1-\gamma} \mathbb{E}_{(o,a) \sim d^{\pi}_{\mathcal{M}_{\text{tgt}}}} \left[ |\Delta \mathcal{R}(o,a)| + \frac{\gamma R_{\max}}{1-\gamma} D_{\text{TV}}\left(\mathcal{T}_{\text{tgt}}(\cdot \mid o,a), \mathcal{T}_{\text{sim}}(\cdot \mid o,a)\right) \right],
+\end{equation}
+where $\Delta \mathcal{R}(o, a) = \mathcal{R}_{\text{tgt}}(o,a) - \mathcal{R}_{\text{sim}}(o,a)$. Rating calibration $W_1$ acts as a proxy for reward error, while genre divergence $D_{\text{JS}}$ and satiation error $|\lambda_u^{\text{real}} - \lambda_u^{\text{sim}}|$ act as proxies for transition divergence $D_{\text{TV}}$. We empirically evaluate whether tighter proxy alignment in $\mathcal{M}_{\text{LLM}}$ yields superior transferred return on held-out trajectories.
+
+\section{Preliminary Efforts}
+
+\subsection{Literature Synthesis}
+Our work bridges three threads: (1) \textbf{Parametric RecSys Simulators}: RecSim \cite{ie2019recsim} and KuaiSim \cite{gao2022kuairec} provide configurable RL environments but rely on stylized parametric choice models. (2) \textbf{LLM User Agents}: Agent4Rec \cite{zhang2024agent4rec} and RecAgent \cite{wang2024user} show that history-conditioned LLMs produce realistic rating distributions, but rely on slow multi-sentence chain-of-thought generation and stop short of closed-loop RL training. (3) \textbf{Offline RL}: While CQL \cite{kumar2020conservative} penalizes out-of-distribution Q-values in static logs, our framework uses a foundation model as an interactive semantic world model.
+
+\subsection{Dataset Preprocessing and Archetype Clustering}
+On \textbf{MovieLens-1M}, we filtered for users with $\ge 50$ interactions, created chronological $60/40$ splits ($\mathcal{D}^{\text{init}} / \mathcal{D}^{\text{eval}}$), and trained a $d=32$ regularized SVD model on $\mathcal{D}^{\text{init}}$ (validation $\text{RMSE} = 0.874$) to extract static item embeddings $\bm{e}_i \in \mathbb{R}^{32}$ and user embeddings $\bm{u}_{\text{emb}} \in \mathbb{R}^{32}$. We computed behavioral vectors $\bm{\phi}(u)$ across all 6,040 users and ran $k$-means clustering ($k=32$) in the joint $(\bm{u}_{\text{emb}}, \bm{\phi}(u))$ space to extract 32 diverse user archetypes matching our parallel environment batch size. On \textbf{KuaiRec}, we processed the fully-observed $1,411 \times 3,327$ matrix, ensuring an uncorrupted test bed for zero-shot transfer without missing-data imputation.
+
+\subsection{High-Throughput Architecture: Single-Pass Logit Extraction}
+Naive autoregressive generation takes $\sim 450\text{ms}$ per step ($>120$ GPU-hours for $10^6$ RL steps). To make online RL tractable on Yale's Bouchet HPC cluster, we designed a high-throughput \texttt{vLLM} wrapper with two optimizations:
+\begin{itemize}
+    \item \textbf{Zero-Generation Token Scoring:} We format the prompt so the next predicted token is the numeric rating $r_t \in \{\text{\texttt{"1"}}, \dots, \text{\texttt{"5"}}\}$. In a single forward pass ($\text{\texttt{max\_tokens}}=1$), we extract raw log-probabilities $\ell_k$ for the 5 rating tokens and apply a temperature-scaled softmax to obtain the exact predictive distribution:
+    \begin{equation}
+        P_{\text{LLM}}(r_t = k \mid \psi_u, \mathcal{H}_t, i_t) = \frac{\exp(\ell_k / \tau)}{\sum_{j=1}^5 \exp(\ell_j / \tau)}, \quad k \in \{1,\dots,5\}.
+    \end{equation}
+    \item \textbf{Automatic Prefix Caching (APC):} By pinning one clustered persona $\psi_u$ ($\sim 350$ tokens) to each of the 32 vectorized environments, \texttt{vLLM} permanently caches all 32 system prompt KV-states in GPU VRAM ($100\%$ prefix-cache hit rate), cutting latency from $450\text{ms}$ to $<12\text{ms}$ per step.
+\end{itemize}
+
+\section{Timeline and Benchmark Plan}
+
+\subsection{Semester Execution Schedule}
+\begin{table}[h]
+\centering
+\label{tab:timeline}
+\footnotesize
+\renewcommand{\arraystretch}{0.92}
+\begin{tabular}{@{}llp{9.3cm}@{}}
+\toprule
+\textbf{Dates} & \textbf{Phase} & \textbf{Key Tasks \& Deliverables} \\ \midrule
+Oct 13 -- Oct 26 & \textbf{1. Fidelity} & Finalize \texttt{vLLM}+\texttt{Gymnasium} wrapper on Bouchet HPC. Evaluate persona fidelity ($D_{\text{JS}}, W_1$, RMSE, $\text{CI}$) and execute 3-way personalization ablations ($\psi_u$ vs.\ $\psi_{\text{generic}}$ vs.\ $\psi_{\emptyset}$). Submit Draft 3. \\ \addlinespace[1pt]
+Oct 27 -- Nov 10 & \textbf{2. Baselines} & Implement RecSim baseline ($\mathcal{M}_{\text{stat}}$), train offline CQL on static logs, and train baseline continuous-action SAC policy inside $\mathcal{M}_{\text{stat}}$ with specified $[256, 256]$ architecture. \\ \addlinespace[1pt]
+Nov 11 -- Nov 25 & \textbf{3. LLM-RL} & Train continuous-action SAC agent inside vectorized $\mathcal{M}_{\text{LLM}}$ across 32 pinned user personas; track sample efficiency, critic stability, and policy entropy. \\ \addlinespace[1pt]
+Nov 26 -- Dec 08 & \textbf{4. Benchmark} & Evaluate $\pi_{\text{LLM}}, \pi_{\text{stat}}, \pi_{\text{CQL}}$ on held-out MovieLens $\mathcal{D}^{\text{eval}}$ via Doubly Robust (DR) OPE, and evaluate zero-shot on the fully-observed \textbf{KuaiRec} matrix to guarantee uncorrupted counterfactual assessment. \\ \addlinespace[1pt]
+Dec 09 -- Dec 22 & \textbf{5. Synthesis} & Analyze policy dynamics (genre diversity, churn reduction, satiation handling), synthesize empirical transfer results with proxy divergences, and finalize the NeurIPS-format report. \\ \bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Methodological Safeguards and Counterfactual Validity}
+\begin{enumerate}[leftmargin=*, nosep]
+    \item \textbf{Dual-Dataset Counterfactual Validity:} Responding to peer review, we resolve MovieLens-1M sparsity by combining it with \textbf{KuaiRec}'s dense matrix ($99.6\%$ observed), providing complete counterfactual ground truth without importance-sampling variance.
+    \item \textbf{Personalization Control:} If unconditioned baseline $\psi_{\emptyset}$ matches $\psi_u$, global popularity priors dominate; we then apply item-mean centering to isolate user-specific preference variance.
+    \item \textbf{Action Space Coverage:} If continuous SAC encounters critic divergence across large catalogs, we pre-filter $M=50$ candidates via SVD inner products and execute discrete Gumbel-Softmax updates.
+\end{enumerate}
+
+\newpage
+\bibliographystyle{unsrtnat}
+\bibliography{references}
+
+\newpage
+\appendix
+
+\section{Summary of Differences Across Proposal Drafts (Addressing Peer Review)}
+In accordance with course guidelines and constructive peer review feedback collected on October 22, 2026, Table \ref{tab:diff} details how Draft 3 directly resolves high-priority reviewer concerns.
+
+\begin{table}[h]
+\centering
+\label{tab:diff}
+\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{2.5cm}>{\raggedright\arraybackslash}p{3.8cm}>{\raggedright\arraybackslash}p{6.4cm}@{}}
+\toprule
+\textbf{Component} & \textbf{Draft 2 Status} & \textbf{Draft 3 Enhancements (Peer Review Revisions)} \\ \midrule
+\textbf{Evaluation Protocol \& Counterfactual Validity} \newline \textit{(Peer Reviews 2 \& 3)} & Relied primarily on MovieLens-1M with KuaiRec mentioned solely as an informal backup. & \textbf{Elevated KuaiRec to a co-primary benchmark.} Because MovieLens ratings are sparse ($>95\%$ missing), standard OPE estimators suffer high variance on unobserved actions. KuaiRec's fully observed $1,411 \times 3,327$ matrix ($99.6\%$ observed) provides exact, unbiased counterfactual ground truth for zero-shot sim-to-real transfer. \\ \addlinespace[4pt]
+\textbf{Disentangling Memorization vs.\ Persona} \newline \textit{(Peer Reviews 2 \& 4)} & Conditioned LLM on user history without verifying whether predictions stem from memorized movie titles. & \textbf{Introduced 3-way Personalization Ablation Suite:} ($\psi_u$ full history vs.\ $\psi_{\text{generic}}$ neutral prompt vs.\ $\psi_{\emptyset}$ unconditioned zero-history baseline) to isolate personalized preference modeling from parametric pretraining memorization and global popularity bias. \\ \addlinespace[4pt]
+\textbf{SAC Architecture Specification} \newline \textit{(Peer Review 4)} & High-level statement of continuous SAC without network topology, causing confusion regarding overfitting. & \textbf{Formally specified exact actor-critic architecture:} 2-layer MLP ($[256, 256]$ hidden units, LayerNorm, ReLU) mapping $o_t \in \mathbb{R}^{202} \to \bm{a}_t \in [-1, 1]^{32}$. Clarified that 32 archetypes are parallel vectorized environment instances, not network outputs, separating state representation from catalog size. \\ \addlinespace[4pt]
+\textbf{Candidate Item Encoding} \newline \textit{(Peer Review 4)} & Unspecified item prompt representation. & \textbf{Explicit semantic prompt formatting:} Candidates are presented with Title, Year, Genres, and a 1-sentence synopsis, preventing reliance on bare title memorization and demonstrating scaling to cold-start catalogs. \\ \addlinespace[4pt]
+\textbf{Session Retention Dynamics} \newline \textit{(Peer Review 2)} & Heuristic quit indicator $c_t \in \{0, 1\}$. & \textbf{Endogenous satisfaction quit rule:} Continuation $c_t$ is determined directly by the persona's predicted satisfaction falling below personalized historical thresholds ($\mathbb{E}[r_t] < \tau_{\text{quit}}(u)$), tightly coupling termination to the generative world model. \\ \bottomrule
+\end{tabular}
+\end{table}
+
+\section{LLM and AI Usage Disclosure}
+In compliance with course policy, we disclose the two distinct roles that Large Language Models play in this project:
+\begin{enumerate}
+    \item \textbf{LLMs as the Core Experimental Object (In-Research Usage):} Open-weight instruction-tuned language models (\texttt{Meta-Llama-3-8B-Instruct}, served locally via \texttt{vLLM} on the YCRC Bouchet HPC cluster) serve as the computational backbone of our proposed \textit{in silico} user simulator $\mathcal{M}_{\text{LLM}}$. Within our experiments, the LLM is prompted with empirical user histories to produce rating token log-probabilities during reinforcement learning rollouts.
+    \item \textbf{LLMs as a Writing and Ideation Assistant (Proposal Preparation):} In preparing Draft 3 of this proposal, Google Gemini was used to: (a) synthesize peer review feedback into actionable mathematical modifications, (b) specify the exact Soft Actor-Critic neural network architecture ($[256, 256]$ MLPs with LayerNorm and MIPS mapping) to resolve reviewer ambiguity, (c) structure the 3-way personalization ablation protocol ($\psi_u, \psi_{\text{generic}}, \psi_{\emptyset}$), and (d) formalize the dual-tier evaluation framework integrating MovieLens-1M with KuaiRec. All experimental design choices, dataset selections, and technical claims are owned by the author.
+\end{enumerate}
+
+\end{document}

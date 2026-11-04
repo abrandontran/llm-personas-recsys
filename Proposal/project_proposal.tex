@@ -1,0 +1,70 @@
+\documentclass[]{../0_aga-homework}
+
+\title{\textbf{Project Proposal:} Robust Reinforcement Learning for Recommender Systems via \textit{In Silico} LLM Personas}
+
+\begin{document}
+
+\section*{Abstract}
+A fundamental challenge in applying Reinforcement Learning (RL) to Recommender Systems (RecSys) is the reliance on rigid statistical simulators that fail to capture the complex, non-stationary nature of human preferences, leading to a significant sim-to-real gap. Meanwhile, live A/B testing of exploratory RL algorithms risks degrading the user experience. This project proposes building a Generative Simulator where Large Language Models (LLMs) act as highly parameterized \textit{in silico} user personas. By formulating the recommendation process as a Partially Observable Markov Decision Process (POMDP), this project will evaluate whether deep RL agents trained against generative LLM personas exhibit greater robustness and a narrower sim-to-real gap compared to agents trained in classical, hard-coded RecSys environments. 
+
+\section*{Existing Research}
+The study of RL in recommender systems has traditionally relied on synthetic simulators to avoid the cost of live environment interactions. 
+\begin{itemize}
+    \item \textbf{Statistical Simulation:} Frameworks like RecSim \cite{ie2019recsim} provide document and user models based on fixed latent transition dynamics. However, these models inherently limit the complexity of human behavior and often lead to RL agents exploiting the simulator's simplicity rather than learning robust, generalizable policies.
+    \item \textbf{Offline RL:} To avoid simulators entirely, Offline RL \cite{levine2020offline} relies on historical logs. Yet, algorithms like Conservative Q-Learning (CQL) still suffer from out-of-distribution actions when faced with the combinatorial action space of slate recommendations.
+    \item \textbf{Generative Agents:} Recent work by Park et al. \cite{park2023generative} demonstrates that LLMs can simulate believable human behavior. Emerging research has begun exploring LLMs for Off-Policy Evaluation (OPE), suggesting that LLM-based agents could serve as dynamic, zero-shot environments for sequential decision-making tasks \cite{wang2023generative}.
+\end{itemize}
+
+\section*{Novel Proposal: Theory \& Computational Components}
+This project sits at the intersection of Generative AI and Robust RL, specifically targeting Generative Off-Policy Evaluation.
+
+\paragraph{Theoretical Component}
+The underlying user state (e.g., fatigue, shifting interests) is unobservable, making the RecSys environment a POMDP. We frame the traditional simulator as a source MDP, $\mathcal{M}_{src}$, and the real-world dataset as the target MDP, $\mathcal{M}_{tgt}$. We will theoretically analyze the bounds on policy degradation when transferring from $\mathcal{M}_{src} \to \mathcal{M}_{tgt}$. We hypothesize that an LLM-based simulator ($\mathcal{M}_{llm}$) acts as a more faithful approximation of $\mathcal{M}_{tgt}$, reducing the divergence between the transition dynamics and thus mitigating the sim-to-real gap.
+
+\paragraph{Computational Component}
+We will construct an OpenAI \texttt{Gym} environment wrapped around an open-source LLM (e.g., Llama-3). 
+\begin{enumerate}
+    \item \textbf{Initialization:} Sample a user profile from a standard dataset (e.g., MovieLens-1M) and inject it into the LLM's system prompt.
+    \item \textbf{Interaction:} At time step $t$, the RL agent recommends an item. The LLM processes the item context and its internal persona state to generate a simulated response (e.g., watch time, rating) and an updated hidden state.
+    \item \textbf{Training:} Train standard Deep RL algorithms (e.g., PPO, SAC) inside this generative environment. 
+\end{enumerate}
+
+\section*{Proposed Timeline \textit{(Relative to Syllabus Weeks)}}
+\begin{itemize}
+    \item \textbf{Weeks 4--5 (Literature \& Setup):} Catch up on foundational theory (Robust RL, POMDPs, and sim-to-real bounds). Set up the HPC environment and deploy a local instance of an open-source LLM.
+    \item \textbf{Weeks 6--7 (Environment Engineering):} Extract user personas from a benchmark dataset (MovieLens or KuaiRec) and finalize the \texttt{Gym} environment wrapping the LLM API.
+    \item \textbf{Weeks 8--10 (RL Training):} Train baseline RL agents (PPO/SAC) in both a standard RecSim environment and the novel LLM persona environment.
+    \item \textbf{Weeks 11--12 (Evaluation):} Perform Off-Policy Evaluation. Evaluate both policies zero-shot on the historical dataset to quantify the sim-to-real gap.
+    \item \textbf{Weeks 13--14 (Analysis \& Writing):} Synthesize theoretical bounds with empirical findings. Finalize the presentation and project report.
+\end{itemize}
+
+\section*{Tools}
+Due to the computational overhead of running thousands of LLM inference queries during RL training steps, this project heavily relies on access to a High-Performance Computing (HPC) cluster. We will utilize GPU nodes to host quantized open-source LLMs (via vLLM or HuggingFace) to act as the massively parallelized \textit{in silico} users. RL algorithms will be implemented using Stable-Baselines3 or Ray/RLlib.
+
+\newpage
+\section*{Appendix: Reference Papers}
+\begin{thebibliography}{9}
+
+\bibitem{ie2019recsim}
+Ie, E., et al. (2019). 
+\textit{RecSim: A Configurable Simulation Platform for Recommender Systems.} 
+arXiv preprint arXiv:1909.04847.
+
+\bibitem{levine2020offline}
+Levine, S., Kumar, A., Tucker, G., \& Fu, J. (2020). 
+\textit{Offline Reinforcement Learning: Tutorial, Review, and Perspectives on Open Problems.} 
+arXiv preprint arXiv:2005.01643.
+
+\bibitem{park2023generative}
+Park, J. S., O'Brien, J. C., Cai, C. J., Morris, M. R., Liang, P., \& Bernstein, M. S. (2023). 
+\textit{Generative Agents: Interactive Simulacra of Human Behavior.} 
+In Proceedings of the 36th Annual ACM Symposium on User Interface Software and Technology.
+
+\bibitem{wang2023generative}
+Wang, L., et al. (2023). 
+\textit{Generative Recommendation: Towards Next-generation Recommender Paradigm.} 
+arXiv preprint arXiv:2304.03516.
+
+\end{thebibliography}
+
+\end{document}
