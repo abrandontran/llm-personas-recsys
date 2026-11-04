@@ -8,6 +8,7 @@ class TestPackageImports(unittest.TestCase):
         import src.models
         import src.metrics
         self.assertTrue(hasattr(src, "__version__"))
+        self.assertEqual(src.__version__, "0.1.0")
 
 if __name__ == "__main__":
     unittest.main()
