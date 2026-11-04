@@ -136,6 +136,62 @@ def fit_svd_embeddings(
     return u_emb, e_norm, e_raw, user_means
 
 
+def compute_user_means(
+    train_interactions: Any,
+    num_users: int,
+    user_ids: Optional[List[Any]] = None,
+) -> np.ndarray:
+    """Computes mean observed rating per user from training interactions.
+
+    Args:
+        train_interactions: Sparse matrix, dense array, or dict of user interactions.
+        num_users: Total number of users.
+        user_ids: Optional list of user identifiers if train_interactions is a dict.
+
+    Returns:
+        np.ndarray of shape (num_users,) with per-user mean ratings (float32).
+    """
+    user_means = np.zeros(num_users, dtype=np.float32)
+    has_ratings = np.zeros(num_users, dtype=bool)
+    all_ratings: List[float] = []
+
+    if isinstance(train_interactions, dict):
+        if user_ids is not None:
+            u_map = {uid: idx for idx, uid in enumerate(user_ids)}
+        else:
+            u_map = {uid: uid for uid in train_interactions.keys()}
+
+        for uid, inters in train_interactions.items():
+            if uid not in u_map:
+                continue
+            u_idx = u_map[uid]
+            if 0 <= u_idx < num_users and len(inters) > 0:
+                ratings = [float(x[1]) for x in inters]
+                user_means[u_idx] = float(np.mean(ratings))
+                has_ratings[u_idx] = True
+                all_ratings.extend(ratings)
+        global_mean = float(np.mean(all_ratings)) if all_ratings else 0.0
+    else:
+        if not sp.isspmatrix_csr(train_interactions):
+            if sp.issparse(train_interactions):
+                csr = train_interactions.tocsr()
+            else:
+                csr = sp.csr_matrix(train_interactions, dtype=np.float32)
+        else:
+            csr = train_interactions
+
+        global_mean = float(np.mean(csr.data)) if len(csr.data) > 0 else 0.0
+        for u in range(num_users):
+            start = csr.indptr[u]
+            end = csr.indptr[u + 1]
+            if end > start:
+                user_means[u] = float(np.mean(csr.data[start:end]))
+                has_ratings[u] = True
+
+    user_means[~has_ratings] = global_mean
+    return user_means
+
+
 def validate_svd_rmse(
     train_interactions: Any,
     eval_interactions: Any,
@@ -170,15 +226,15 @@ def validate_svd_rmse(
     Returns:
         float validation RMSE.
     """
-    u_indices: List[int] = []
-    i_indices: List[int] = []
-    actual_ratings: List[float] = []
-
     if isinstance(eval_interactions, dict):
         if user_ids is None or item_ids is None:
             raise ValueError("user_ids and item_ids are required when eval_interactions is a dict.")
         u_map = {uid: idx for idx, uid in enumerate(user_ids)}
         i_map = {iid: idx for idx, iid in enumerate(item_ids)}
+
+        u_indices: List[int] = []
+        i_indices: List[int] = []
+        actual_ratings: List[float] = []
 
         for uid, inters in eval_interactions.items():
             if uid not in u_map:
@@ -191,28 +247,32 @@ def validate_svd_rmse(
                     u_indices.append(u_idx)
                     i_indices.append(i_map[iid])
                     actual_ratings.append(rating)
+
+        u_arr = np.array(u_indices, dtype=np.int32)
+        i_arr = np.array(i_indices, dtype=np.int32)
+        r_arr = np.array(actual_ratings, dtype=np.float32)
     elif sp.issparse(eval_interactions):
         coo = eval_interactions.tocoo()
-        u_indices = coo.row.tolist()
-        i_indices = coo.col.tolist()
-        actual_ratings = coo.data.astype(float).tolist()
+        u_arr = coo.row.astype(np.int32)
+        i_arr = coo.col.astype(np.int32)
+        r_arr = coo.data.astype(np.float32)
     elif isinstance(eval_interactions, np.ndarray):
         rows, cols = np.nonzero(eval_interactions)
-        u_indices = rows.tolist()
-        i_indices = cols.tolist()
-        actual_ratings = eval_interactions[rows, cols].astype(float).tolist()
+        u_arr = rows.astype(np.int32)
+        i_arr = cols.astype(np.int32)
+        r_arr = eval_interactions[rows, cols].astype(np.float32)
     else:
         raise TypeError(f"Unsupported eval_interactions type: {type(eval_interactions)}")
 
-    if not actual_ratings:
+    if len(r_arr) == 0:
         raise ValueError("No observed evaluation pairs found for RMSE validation.")
 
-    u_arr = np.array(u_indices, dtype=np.int32)
-    i_arr = np.array(i_indices, dtype=np.int32)
-    r_arr = np.array(actual_ratings, dtype=np.float32)
-
     if user_means is None:
-        user_means = np.zeros(u_emb.shape[0], dtype=np.float32)
+        user_means = compute_user_means(
+            train_interactions=train_interactions,
+            num_users=u_emb.shape[0],
+            user_ids=user_ids,
+        )
 
     u_vecs = u_emb[u_arr]
     e_vecs = e_raw[i_arr]

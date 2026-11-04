@@ -130,6 +130,41 @@ class TestEmbeddings(unittest.TestCase):
         self.assertGreaterEqual(rmse, 0.75)
         self.assertLessEqual(rmse, 1.05)
 
+    def test_validate_svd_rmse_sparse_default_means(self):
+        """Test validate_svd_rmse with scipy.sparse matrices and default user_means=None."""
+        num_users, num_items, d = 100, 50, 16
+        u_latent = self.rng.normal(0, 0.3, size=(num_users, d)).astype(np.float32)
+        v_latent = self.rng.normal(0, 0.3, size=(num_items, d)).astype(np.float32)
+        base_means = self.rng.uniform(3.0, 3.8, size=(num_users,)).astype(np.float32)
+
+        R_dense = np.zeros((num_users, num_items), dtype=np.float32)
+        for u in range(num_users):
+            for i in range(num_items):
+                if self.rng.random() > 0.6:
+                    r = base_means[u] + np.dot(u_latent[u], v_latent[i]) + self.rng.normal(0, 0.8)
+                    R_dense[u, i] = np.clip(r, 1.0, 5.0)
+
+        mask_train = (R_dense > 0) & (self.rng.random(size=(num_users, num_items)) > 0.4)
+        mask_eval = (R_dense > 0) & (~mask_train)
+
+        R_train = sp.csr_matrix(R_dense * mask_train)
+        R_eval = sp.csr_matrix(R_dense * mask_eval)
+
+        u_emb, e_norm, e_raw, user_means = fit_svd_embeddings(R_train, d=d)
+
+        # Call with default user_means=None and sparse matrices
+        rmse_default = validate_svd_rmse(R_train, R_eval, u_emb, e_raw)
+
+        self.assertIsInstance(rmse_default, float)
+        self.assertGreaterEqual(rmse_default, 0.75)
+        self.assertLessEqual(rmse_default, 1.05)
+
+        # Compare against explicit user_means call
+        rmse_explicit = validate_svd_rmse(
+            R_train, R_eval, u_emb, e_raw, user_means=user_means
+        )
+        self.assertAlmostEqual(rmse_default, rmse_explicit, places=5)
+
     def test_kuairec_svd(self):
         """Test KuaiRec SVD on synthetic (100, 50) dense matrix."""
         num_users, num_items, d = 100, 50, 32
