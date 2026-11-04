@@ -110,8 +110,7 @@ def compute_behavioral_signature(
     else:
         primary_genres_arr = np.asarray(primary_genres, dtype=int)
 
-    k_vals: List[float] = []
-    r_vals: List[float] = []
+    valid_chains: List[Tuple[np.ndarray, np.ndarray]] = []
 
     # Identify repetition chains for each primary genre
     for g in range(18):
@@ -126,24 +125,26 @@ def compute_behavioral_signature(
                 current_chain.append(idx)
             else:
                 if len(current_chain) >= 2:
-                    for k_step, t_idx in enumerate(current_chain):
-                        k_vals.append(float(k_step))
-                        r_vals.append(float(ratings[t_idx]))
+                    k_chain = np.arange(len(current_chain), dtype=np.float64)
+                    r_chain = np.array([ratings[t_idx] for t_idx in current_chain], dtype=np.float64)
+                    valid_chains.append((k_chain, r_chain))
                 current_chain = [idx]
 
         if len(current_chain) >= 2:
-            for k_step, t_idx in enumerate(current_chain):
-                k_vals.append(float(k_step))
-                r_vals.append(float(ratings[t_idx]))
+            k_chain = np.arange(len(current_chain), dtype=np.float64)
+            r_chain = np.array([ratings[t_idx] for t_idx in current_chain], dtype=np.float64)
+            valid_chains.append((k_chain, r_chain))
 
-    if len(k_vals) >= 2:
-        k_arr = np.array(k_vals, dtype=np.float64)
-        r_arr = np.array(r_vals, dtype=np.float64)
-        k_mean = np.mean(k_arr)
-        r_mean = np.mean(r_arr)
-        var_k = np.sum((k_arr - k_mean) ** 2)
+    if valid_chains:
+        cov_kr = 0.0
+        var_k = 0.0
+        for k_chain, r_chain in valid_chains:
+            k_centered = k_chain - np.mean(k_chain)
+            r_centered = r_chain - np.mean(r_chain)
+            cov_kr += float(np.sum(k_centered * r_centered))
+            var_k += float(np.sum(k_centered ** 2))
+
         if var_k > 1e-9:
-            cov_kr = np.sum((k_arr - k_mean) * (r_arr - r_mean))
             lambda_u = float(cov_kr / var_k)
         else:
             lambda_u = 0.0
@@ -264,11 +265,14 @@ def extract_k_archetypes(
     item_metadata: Dict[str, Dict],
     k: int = 32,
     random_state: int = 42,
+    normalize_blocks: bool = True,
 ) -> List[Dict[str, Any]]:
     """Extracts k representative user archetypes via k-means clustering in joint R^53 space.
 
     Concatenates latent factor embeddings u_emb in R^32 and behavioral signatures phi(u) in R^21
-    to form z_u in R^53. Identifies empirical exemplar users closest to cluster centroids,
+    to form z_u in R^53. Normalizes block variances when normalize_blocks=True to prevent
+    signature features from dominating Euclidean distance over latent factors.
+    Identifies empirical exemplar users closest to cluster centroids,
     extracts personalized quit thresholds tau_quit, and generates structured persona prompts.
 
     Args:
@@ -279,6 +283,8 @@ def extract_k_archetypes(
         item_metadata: Mapping from item_id to metadata dictionaries with 'title' and 'genres'.
         k: Number of cluster archetypes to extract (default: 32).
         random_state: Random seed for KMeans reproducibility (default: 42).
+        normalize_blocks: Whether to scale u_emb and phi(u) to equal standard deviation
+            so collaborative and behavioral features contribute balanced variance (default: True).
 
     Returns:
         List of k archetype dictionaries formatted for simulation and LLM emulation.
@@ -293,13 +299,24 @@ def extract_k_archetypes(
             f"and {user_signatures.shape[0]} signatures."
         )
 
-    # Form joint representation z_u in R^53
-    z = np.hstack([user_embeddings, user_signatures]).astype(np.float32)
+    # Form joint representation in R^53 with block variance balancing
+    if normalize_blocks:
+        std_u = float(np.std(user_embeddings))
+        scale_u = std_u if std_u > 1e-9 else 1.0
+        u_scaled = (user_embeddings / scale_u).astype(np.float32)
+
+        std_phi = float(np.std(user_signatures))
+        scale_phi = std_phi if std_phi > 1e-9 else 1.0
+        phi_scaled = (user_signatures / scale_phi).astype(np.float32)
+
+        z_clustering = np.hstack([u_scaled, phi_scaled]).astype(np.float32)
+    else:
+        z_clustering = np.hstack([user_embeddings, user_signatures]).astype(np.float32)
 
     # Fit k-means clustering
     k_actual = min(k, num_users)
     kmeans = KMeans(n_clusters=k_actual, random_state=random_state, n_init=10)
-    cluster_labels = kmeans.fit_predict(z)
+    cluster_labels = kmeans.fit_predict(z_clustering)
     centroids = kmeans.cluster_centers_  # (k_actual, 53)
 
     archetypes: List[Dict[str, Any]] = []
@@ -307,8 +324,8 @@ def extract_k_archetypes(
 
     for k_idx in range(k_actual):
         centroid = centroids[k_idx]
-        # Distances from all users to this centroid
-        dists = np.linalg.norm(z - centroid, axis=1)
+        # Distances from all users to this centroid in balanced clustering space
+        dists = np.linalg.norm(z_clustering - centroid, axis=1)
 
         # Find closest empirical user, preferring unassigned users
         sorted_indices = np.argsort(dists)
@@ -406,6 +423,7 @@ def run_archetypes_pipeline(
     d: int = 32,
     k: int = 32,
     random_state: int = 42,
+    normalize_blocks: bool = True,
 ) -> List[Dict[str, Any]]:
     """Runs the complete behavioral signature and archetype extraction pipeline.
 
@@ -417,6 +435,7 @@ def run_archetypes_pipeline(
         d: SVD embedding dimension (default: 32).
         k: Number of archetypes (default: 32).
         random_state: Random state for k-means (default: 42).
+        normalize_blocks: Whether to balance block scale in joint clustering space (default: True).
 
     Returns:
         List of k archetype dictionaries.
@@ -469,15 +488,18 @@ def run_archetypes_pipeline(
         item_metadata=item_metadata,
         k=k,
         random_state=random_state,
+        normalize_blocks=normalize_blocks,
     )
 
-    # Persist archetypes artifact
+    # Persist archetypes artifact atomically
     out_path = artifacts_dir / f"user_archetypes_k{k}.json"
-    with open(out_path, "w", encoding="utf-8") as f:
+    tmp_path = artifacts_dir / f"user_archetypes_k{k}.json.tmp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump(archetypes, f, indent=2)
+    tmp_path.replace(out_path)
 
     logger.info(
-        f"Saved {len(archetypes)} user archetypes to {out_path}."
+        f"Saved {len(archetypes)} user archetypes atomically to {out_path}."
     )
 
     return archetypes

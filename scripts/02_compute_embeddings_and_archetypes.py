@@ -66,6 +66,11 @@ def main() -> None:
         help="Minimum acceptable SVD validation RMSE bound (default: 0.75)",
     )
     parser.add_argument(
+        "--no-normalize-blocks",
+        action="store_true",
+        help="Disable block variance balancing prior to k-means clustering.",
+    )
+    parser.add_argument(
         "--max-rmse",
         type=float,
         default=1.05,
@@ -115,6 +120,7 @@ def main() -> None:
         d=args.d,
         k=args.k,
         random_state=args.random_state,
+        normalize_blocks=not args.no_normalize_blocks,
     )
     t_arc = time.time() - t_arc_start
     logger.info(f"Archetype extraction completed in {t_arc:.2f}s.")

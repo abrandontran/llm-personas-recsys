@@ -3,13 +3,20 @@
 Task 4 (Bucket 2b) of the Pre-Bouchet Pipeline.
 """
 
+import json
+import pickle
+import tempfile
 import unittest
+from pathlib import Path
+
 import numpy as np
+
 from src.data.archetypes import (
     CANONICAL_GENRES,
     compute_behavioral_signature,
     compute_all_user_signatures,
     extract_k_archetypes,
+    run_archetypes_pipeline,
 )
 
 
@@ -183,6 +190,102 @@ class TestArchetypes(unittest.TestCase):
         self.assertEqual(item_pop[10], 2)
         self.assertEqual(item_pop[20], 2)
         self.assertEqual(item_pop[30], 2)
+
+
+    def test_satiation_within_chain_fixed_effects(self):
+        """Test that within-chain centering avoids baseline confounding across multiple chains (Simpson's paradox)."""
+        # Chain 1 (Action): 3 items with ratings 5.0 -> 4.0 -> 3.0 (within-chain slope = -1.0)
+        # 4 intervening non-repeated items: Drama, Horror, Sci-Fi, Musical (lags > 3)
+        # Chain 2 (Comedy): 2 items with ratings 2.0 -> 1.0 (within-chain slope = -1.0)
+        genre_indicators = np.zeros((9, 18), dtype=float)
+        # Action is genre 0
+        genre_indicators[0, 0] = 1.0
+        genre_indicators[1, 0] = 1.0
+        genre_indicators[2, 0] = 1.0
+
+        # Intervening non-repeated items
+        genre_indicators[3, 7] = 1.0  # Drama
+        genre_indicators[4, 10] = 1.0  # Horror
+        genre_indicators[5, 14] = 1.0  # Sci-Fi
+        genre_indicators[6, 11] = 1.0  # Musical
+
+        # Comedy is genre 4
+        genre_indicators[7, 4] = 1.0
+        genre_indicators[8, 4] = 1.0
+
+        ratings = np.array([5.0, 4.0, 3.0, 3.0, 3.0, 3.0, 3.0, 2.0, 1.0])
+        pop_counts = np.ones(9) * 100
+
+        phi = compute_behavioral_signature(ratings, genre_indicators, pop_counts)
+        # Both chains have a within-chain slope of -1.0
+        self.assertAlmostEqual(phi[19], -1.0, places=4)
+
+    def test_run_archetypes_pipeline_integration(self):
+        """Integration test verifying run_archetypes_pipeline end-to-end on synthetic artifacts."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            num_users = 20
+            d = 32
+            k = 4
+            user_ids = list(range(1, num_users + 1))
+            item_ids = list(range(1, 15))
+
+            item_metadata = {
+                str(i): {
+                    "title": f"Movie {i}",
+                    "year": 1995,
+                    "genres": [CANONICAL_GENRES[i % 18]],
+                    "synopsis": f"Synopsis for movie {i}",
+                }
+                for i in item_ids
+            }
+            with open(tmp_path / "item_metadata.json", "w", encoding="utf-8") as f:
+                json.dump(item_metadata, f, indent=2)
+
+            train_interactions = {
+                uid: [(i, 3.5 + 0.5 * (i % 3), 1000 + i) for i in range(1, 10)]
+                for uid in user_ids
+            }
+            eval_interactions = {
+                uid: [(i, 4.0, 2000 + i) for i in range(10, 15)]
+                for uid in user_ids
+            }
+
+            splits_payload = {
+                "train_interactions": train_interactions,
+                "eval_interactions": eval_interactions,
+                "user_ids": user_ids,
+                "item_ids": item_ids,
+            }
+            with open(tmp_path / "data_splits.pkl", "wb") as f:
+                pickle.dump(splits_payload, f)
+
+            user_embs = self.rng.normal(0, 0.5, size=(num_users, d)).astype(np.float32)
+            np.save(tmp_path / f"user_embeddings_d{d}.npy", user_embs)
+
+            archetypes = run_archetypes_pipeline(
+                artifacts_dir=tmp_path,
+                d=d,
+                k=k,
+                random_state=42,
+                normalize_blocks=True,
+            )
+
+            self.assertEqual(len(archetypes), k)
+            out_file = tmp_path / f"user_archetypes_k{k}.json"
+            self.assertTrue(out_file.exists())
+
+            with open(out_file, "r", encoding="utf-8") as f:
+                loaded = json.load(f)
+            self.assertEqual(len(loaded), k)
+            for arc in loaded:
+                self.assertIn("archetype_id", arc)
+                self.assertIn("user_id", arc)
+                self.assertIn("tau_quit", arc)
+                self.assertIn("system_prompt", arc)
+                self.assertEqual(len(arc["u_emb"]), d)
+                self.assertEqual(len(arc["phi"]), 21)
+                self.assertEqual(len(arc["genre_simplex"]), 18)
 
 
 if __name__ == "__main__":
