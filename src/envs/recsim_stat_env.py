@@ -204,9 +204,12 @@ class ParametricRecSimEnv(RecEnv):
         if len(self.history) > 5:
             self.history.pop()
 
-        # 9. Step counter and horizon truncation
+        # 9. Step counter and horizon / item exhaustion truncation
         self.current_step += 1
-        truncated = bool(self.current_step >= self.max_steps)
+        truncated = bool(
+            self.current_step >= self.max_steps
+            or len(self.consumed_items) >= self.num_items
+        )
 
         next_obs = self._get_observation()
         info = {

@@ -92,6 +92,7 @@ class RecEnv(gym.Env):
             RuntimeError: If all items in the catalog have already been consumed.
         """
         action = np.asarray(action, dtype=np.float32).reshape(-1)
+        action = np.clip(np.nan_to_num(action, nan=0.0), -1.0, 1.0)
         norm = float(np.linalg.norm(action)) + 1e-8
         a_norm = action / norm
 
@@ -102,7 +103,6 @@ class RecEnv(gym.Env):
             valid_consumed = consumed_arr[(consumed_arr >= 0) & (consumed_arr < self.num_items)]
             if len(valid_consumed) >= self.num_items:
                 raise RuntimeError("All catalog items have been consumed in this session.")
-            sims = sims.copy()
             sims[valid_consumed] = -np.inf
 
         selected_item = int(np.argmax(sims))
@@ -122,17 +122,21 @@ class RecEnv(gym.Env):
 
         Args:
             action: Continuous action vector a_t in [-1, 1]^32.
-            tau_pi: Boltzmann temperature hyperparameter (default: 0.1).
+            tau_pi: Boltzmann temperature hyperparameter (default: 0.1). Must be > 0.
             consumed_items: Optional set of consumed item indices. If None, uses
                 self.consumed_items.
 
         Returns:
             np.ndarray of shape (N,) summing to 1.0, with zero probability on consumed items.
         """
+        if tau_pi <= 0.0:
+            raise ValueError(f"tau_pi must be strictly positive, got {tau_pi}")
+
         if consumed_items is None:
             consumed_items = self.consumed_items
 
         action = np.asarray(action, dtype=np.float32).reshape(-1)
+        action = np.clip(np.nan_to_num(action, nan=0.0), -1.0, 1.0)
         norm = float(np.linalg.norm(action)) + 1e-8
         a_norm = action / norm
 
@@ -140,8 +144,11 @@ class RecEnv(gym.Env):
 
         # Build mask of unconsumed items
         unconsumed_mask = np.ones(self.num_items, dtype=bool)
-        if consumed_items:
-            consumed_arr = np.fromiter(consumed_items, dtype=np.int64)
+        if consumed_items is not None and len(consumed_items) > 0:
+            consumed_arr = np.asarray(
+                list(consumed_items) if isinstance(consumed_items, (set, frozenset)) else consumed_items,
+                dtype=np.int64,
+            )
             valid_consumed = consumed_arr[(consumed_arr >= 0) & (consumed_arr < self.num_items)]
             unconsumed_mask[valid_consumed] = False
 

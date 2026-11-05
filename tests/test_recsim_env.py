@@ -274,6 +274,75 @@ class TestRecSimEnv(unittest.TestCase):
         self.assertFalse(np.isinf(probs).any())
         self.assertAlmostEqual(float(np.sum(probs)), 1.0, places=5)
 
+    def test_array_like_consumed_items(self):
+        env = ParametricRecSimEnv(
+            item_embeddings=self.item_embs,
+            item_genres=self.item_genres,
+            archetypes=self.archetypes,
+            seed=42,
+        )
+        env.reset()
+        action = np.ones(32, dtype=np.float32)
+        # Pass a NumPy array instead of a set
+        consumed_arr = np.array([2, 5, 8], dtype=np.int64)
+        probs = env.get_action_distribution(action, tau_pi=0.1, consumed_items=consumed_arr)
+        self.assertEqual(probs[2], 0.0)
+        self.assertEqual(probs[5], 0.0)
+        self.assertEqual(probs[8], 0.0)
+        self.assertAlmostEqual(float(np.sum(probs)), 1.0, places=5)
+
+    def test_non_positive_temperature_guard(self):
+        env = ParametricRecSimEnv(
+            item_embeddings=self.item_embs,
+            item_genres=self.item_genres,
+            archetypes=self.archetypes,
+            seed=42,
+        )
+        env.reset()
+        action = np.ones(32, dtype=np.float32)
+        with self.assertRaises(ValueError):
+            env.get_action_distribution(action, tau_pi=0.0)
+        with self.assertRaises(ValueError):
+            env.get_action_distribution(action, tau_pi=-0.1)
+
+    def test_catalog_exhaustion_truncation(self):
+        # Small catalog with only 3 items, max_steps = 10
+        small_embs = self.item_embs[:3]
+        small_genres = self.item_genres[:3]
+        env = ParametricRecSimEnv(
+            item_embeddings=small_embs,
+            item_genres=small_genres,
+            archetypes=self.archetypes,
+            max_steps=10,
+            seed=42,
+        )
+        env.reset(seed=42, options={"archetype_id": 0})
+        env.tau_quit = 0.0  # Prevent churn
+
+        # Step 1
+        _, _, term1, trunc1, _ = env.step(np.random.randn(32).astype(np.float32))
+        self.assertFalse(trunc1)
+        # Step 2
+        _, _, term2, trunc2, _ = env.step(np.random.randn(32).astype(np.float32))
+        self.assertFalse(trunc2)
+        # Step 3: All 3 items now consumed -> must set truncated = True
+        _, _, term3, trunc3, _ = env.step(np.random.randn(32).astype(np.float32))
+        self.assertTrue(trunc3)
+
+    def test_nan_and_out_of_bounds_action_handling(self):
+        env = ParametricRecSimEnv(
+            item_embeddings=self.item_embs,
+            item_genres=self.item_genres,
+            archetypes=self.archetypes,
+            seed=42,
+        )
+        env.reset(seed=42, options={"archetype_id": 0})
+        # Action with NaNs and out of bounds values
+        bad_action = np.array([np.nan, 99.0, -99.0] + [0.0] * 29, dtype=np.float32)
+        next_obs, reward, terminated, truncated, info = env.step(bad_action)
+        self.assertEqual(next_obs.shape, (202,))
+        self.assertIn("recommended_item", info)
+
 
 if __name__ == "__main__":
     unittest.main()
