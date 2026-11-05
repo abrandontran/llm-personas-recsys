@@ -74,6 +74,9 @@ while [ ${RETRY_COUNT} -lt ${MAX_RETRIES} ]; do
     if curl -s "http://127.0.0.1:${PORT}/v1/models" >/dev/null 2>&1; then
         echo "[SUCCESS] vLLM server is healthy and responding!"
         HEALTHY=1
+        mkdir -p artifacts
+        hostname -s > artifacts/vllm_host.txt
+        echo "Recorded vLLM node hostname ($(cat artifacts/vllm_host.txt)) to artifacts/vllm_host.txt"
         break
     fi
     echo "Waiting for server warmup... (${RETRY_COUNT}/${MAX_RETRIES})"

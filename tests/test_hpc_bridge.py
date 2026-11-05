@@ -17,7 +17,11 @@ if str(project_root) not in sys.path:
 
 from src.envs.base_env import RecEnv
 from src.envs.mock_llm_env import MockLLMEnv
-from scripts.evaluate_fidelity_ablation import compute_ndcg_at_k
+from scripts.evaluate_fidelity_ablation import (
+    compute_ndcg_at_k,
+    format_candidate_item_string,
+    query_vllm_rating,
+)
 
 
 class TestMockLLMEnv(unittest.TestCase):
@@ -65,6 +69,33 @@ class TestMockLLMEnv(unittest.TestCase):
         obs, info = fallback_env.reset()
         self.assertEqual(obs.shape, (202,))
         self.assertIn("tau_quit", info)
+
+    def test_item_embs_alias_and_kwargs(self):
+        """Verifies MockLLMEnv accepts item_embs alias and extraneous kwargs."""
+        alias_env = MockLLMEnv(
+            item_embs=self.item_embs,
+            archetypes=self.archetypes,
+            dummy_kwarg=True,
+            another_flag="ignored",
+        )
+        obs, info = alias_env.reset()
+        self.assertEqual(obs.shape, (202,))
+        # Error raised when neither provided
+        with self.assertRaises(ValueError):
+            MockLLMEnv()
+
+    def test_choice_probabilities_precision(self):
+        """Verifies that probabilities strictly sum to 1.0 without float rounding errors."""
+        env = MockLLMEnv(item_embeddings=self.item_embs, seed=123)
+        env.reset()
+        # Step through 50 recommendations with varying actions
+        for _ in range(50):
+            act = np.random.uniform(-1, 1, 32).astype(np.float32)
+            _, _, term, trunc, info = env.step(act)
+            logits, probs, _ = env.compute_rating_logits(self.item_embs[0])
+            self.assertAlmostEqual(float(np.sum(probs)), 1.0, places=6)
+            if term or trunc:
+                env.reset()
 
     def test_reset_options(self):
         """Verifies resetting with archetype options selects correct persona."""
@@ -167,6 +198,8 @@ class TestSlurmSuiteAndBouchetPayload(unittest.TestCase):
         self.assertIn("vllm serve", content)
         self.assertIn("--enable-prefix-caching", content)
         self.assertIn("--gpu-memory-utilization 0.90", content)
+        # Multi-node host recording
+        self.assertIn("hostname -s > artifacts/vllm_host.txt", content)
 
     def test_slurm_ablation_script(self):
         """Verifies slurm/02_run_fidelity_ablation.sh syntax and directives."""
@@ -182,6 +215,9 @@ class TestSlurmSuiteAndBouchetPayload(unittest.TestCase):
         self.assertIn("fidelity_ablation_results.json", content)
         self.assertIn("psi_u", content)
         self.assertIn("psi_generic", content)
+        # Multi-node hostname resolution and --vllm-url flag
+        self.assertIn("vllm_host.txt", content)
+        self.assertIn("--vllm-url", content)
 
     def test_prep_bouchet_payload_script(self):
         """Verifies scripts/06_prep_bouchet_payload.py executes and passes verification."""
@@ -209,6 +245,24 @@ class TestMilestoneVisualizations(unittest.TestCase):
         ndcg_rev = compute_ndcg_at_k(true_r, pred_reverse, k=5)
         self.assertLess(ndcg_rev, 1.0)
         self.assertGreater(ndcg_rev, 0.0)
+
+    def test_vllm_query_offline_fallback(self):
+        """Verifies query_vllm_rating returns None when server is unreachable."""
+        res = query_vllm_rating(
+            vllm_url="http://127.0.0.1:9999/v1",  # Unused port
+            prompt="Test prompt",
+            model_name="test-model",
+            timeout=0.2,
+        )
+        self.assertIsNone(res)
+
+    def test_format_candidate_item_string(self):
+        """Verifies structured semantic prompt formatting for movie items."""
+        meta = {"title": "Toy Story", "year": "1995", "genres": ["Animation", "Comedy"]}
+        item_str = format_candidate_item_string(1, {"1": meta})
+        self.assertIn("Title: Toy Story", item_str)
+        self.assertIn("Year: 1995", item_str)
+        self.assertIn("Genres: Animation, Comedy", item_str)
 
     def test_fidelity_ablation_results_json(self):
         """Verifies artifacts/fidelity_ablation_results.json structure and metrics."""

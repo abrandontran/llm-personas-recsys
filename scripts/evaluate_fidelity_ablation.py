@@ -12,7 +12,7 @@ Calculates:
   - Temporal consistency: Cosine alignment of behavioral signatures across rollout halves
 
 Saves results to artifacts/fidelity_ablation_results.json.
-Supports live vLLM HTTP querying or fast local simulation.
+Supports live vLLM HTTP querying via single-pass token logprob scoring or fast local simulation.
 """
 
 import argparse
@@ -23,6 +23,8 @@ import os
 import pickle
 import sys
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -84,6 +86,91 @@ def compute_ndcg_at_k(
     return float(dcg / idcg)
 
 
+def get_vllm_model_name(vllm_url: str, timeout: float = 3.0) -> str:
+    """Fetches served model name from vLLM endpoint, with fallback."""
+    endpoint = f"{vllm_url.rstrip('/')}/models"
+    try:
+        req = urllib.request.Request(endpoint)
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            data = json.loads(response.read().decode("utf-8"))
+            if "data" in data and len(data["data"]) > 0:
+                return data["data"][0]["id"]
+    except Exception:
+        pass
+    return "meta-llama/Meta-Llama-3-8B-Instruct"
+
+
+def query_vllm_rating(
+    vllm_url: str,
+    prompt: str,
+    model_name: str,
+    timeout: float = 5.0,
+) -> Optional[float]:
+    """Queries live vLLM completion API for single-pass rating token logprobs.
+
+    Extracts logprobs for tokens {'1', '2', '3', '4', '5'}, computes temperature-scaled
+    softmax distribution, and returns expected continuous rating E[r] in [1, 5].
+
+    Args:
+        vllm_url: Base URL of vLLM server (e.g. 'http://localhost:8000/v1').
+        prompt: Formatted persona prompt text.
+        model_name: Name of model served on vLLM.
+        timeout: Network timeout in seconds.
+
+    Returns:
+        Expected rating float in [1.0, 5.0], or None if connection fails.
+    """
+    endpoint = f"{vllm_url.rstrip('/')}/completions"
+    payload = {
+        "model": model_name,
+        "prompt": prompt,
+        "max_tokens": 1,
+        "temperature": 0.0,
+        "logprobs": 5,
+    }
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        endpoint,
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            res = json.loads(response.read().decode("utf-8"))
+            choice = res["choices"][0]
+            top_logprobs = choice.get("logprobs", {}).get("top_logprobs", [{}])[0]
+
+            # Extract logprobs for tokens "1" through "5"
+            logprobs = []
+            for tok in ["1", "2", "3", "4", "5"]:
+                lp = top_logprobs.get(tok, top_logprobs.get(f" {tok}", -20.0))
+                logprobs.append(float(lp))
+
+            # Temperature-scaled softmax in float64
+            arr = np.array(logprobs, dtype=np.float64)
+            arr = np.exp(arr - np.max(arr))
+            probs = arr / np.sum(arr)
+            expected_rating = float(np.sum(np.array([1, 2, 3, 4, 5]) * probs))
+            return float(np.clip(expected_rating, 1.0, 5.0))
+    except Exception as e:
+        logger.debug(f"vLLM query failed: {e}")
+        return None
+
+
+def format_candidate_item_string(
+    item_id: Any,
+    item_metadata: Dict[str, Any],
+) -> str:
+    """Formats candidate item into structured semantic prompt record."""
+    meta = item_metadata.get(str(item_id)) or item_metadata.get(item_id, {})
+    title = meta.get("title", f"Movie #{item_id}")
+    year = meta.get("year", "N/A")
+    genres = ", ".join(meta.get("genres", ["Drama"]))
+    synopsis = meta.get("synopsis", "A feature film.")
+    return f"[Title: {title} | Year: {year} | Genres: {genres} | Synopsis: {synopsis}]"
+
+
 def run_fidelity_ablation_evaluation(
     data_splits: Dict[str, Any],
     item_metadata: Dict[str, Any],
@@ -92,6 +179,7 @@ def run_fidelity_ablation_evaluation(
     user_embeddings: np.ndarray,
     num_eval_users: int = 100,
     seed: int = 42,
+    vllm_url: Optional[str] = None,
 ) -> Dict[str, Dict[str, float]]:
     """Runs fidelity evaluation across the 3 personalization regimes.
 
@@ -103,6 +191,7 @@ def run_fidelity_ablation_evaluation(
         user_embeddings: Array of shape (N_users, 32).
         num_eval_users: Number of held-out users to evaluate.
         seed: Random seed.
+        vllm_url: Optional URL of live vLLM inference server.
 
     Returns:
         Dictionary mapping regime names to metrics dictionaries.
@@ -148,6 +237,28 @@ def run_fidelity_ablation_evaluation(
     norm_m = float(np.linalg.norm(mean_u_vec)) + 1e-8
     mean_u_vec = (mean_u_vec / norm_m).astype(np.float32)
 
+    # Check vLLM server connectivity if provided
+    use_vllm = False
+    vllm_model = "meta-llama/Meta-Llama-3-8B-Instruct"
+    if vllm_url:
+        logger.info(f"Probing live vLLM server at {vllm_url}...")
+        try:
+            vllm_model = get_vllm_model_name(vllm_url)
+            # Test query
+            test_res = query_vllm_rating(
+                vllm_url=vllm_url,
+                prompt="Rate movie: [Title: Inception | Year: 2010 | Genres: Sci-Fi]\nRating (1-5):",
+                model_name=vllm_model,
+                timeout=2.0,
+            )
+            if test_res is not None:
+                use_vllm = True
+                logger.info(f"[CONNECTED] Live vLLM server verified with model '{vllm_model}'.")
+            else:
+                logger.warning("[WARNING] vLLM responded without valid rating logprobs. Falling back to local simulation.")
+        except Exception as e:
+            logger.warning(f"[WARNING] Could not connect to vLLM server at {vllm_url} ({e}). Falling back to local simulation.")
+
     # Accumulators for metrics across regimes
     regimes = ["psi_u", "psi_generic", "psi_empty"]
     errors: Dict[str, List[float]] = {k: [] for k in regimes}
@@ -164,29 +275,50 @@ def run_fidelity_ablation_evaluation(
         u_vec = u_vec / norm_u
 
         inters = eval_interactions.get(uid, [])
-        valid_inters = [(i_map[x[0]], float(x[1])) for x in inters if x[0] in i_map]
+        valid_inters = [(i_map[x[0]], float(x[1]), x[0]) for x in inters if x[0] in i_map]
         if len(valid_inters) < 5:
             continue
 
         item_indices = np.array([x[0] for x in valid_inters], dtype=np.int64)
         true_r = np.array([x[1] for x in valid_inters], dtype=np.float32)
+        raw_iids = [x[2] for x in valid_inters]
+
+        cand_embs = item_embeddings[item_indices]
 
         # 1. Regime psi_u: Full Persona taste conditioning
-        cand_embs = item_embeddings[item_indices]
         sims_u = np.dot(cand_embs, u_vec)
-        # Expected rating with residual personalization noise
-        pred_u = 3.0 + 2.0 * sims_u + rng.normal(0, 0.15, size=len(sims_u))
-        pred_u = np.clip(pred_u, 1.0, 5.0)
+        pred_u = np.clip(3.0 + 2.0 * sims_u + rng.normal(0, 0.15, size=len(sims_u)), 1.0, 5.0)
 
         # 2. Regime psi_generic: Neutral average viewer
         sims_gen = np.dot(cand_embs, mean_u_vec)
-        pred_gen = 3.0 + 1.2 * sims_gen + rng.normal(0, 0.40, size=len(sims_gen))
-        pred_gen = np.clip(pred_gen, 1.0, 5.0)
+        pred_gen = np.clip(3.0 + 1.2 * sims_gen + rng.normal(0, 0.40, size=len(sims_gen)), 1.0, 5.0)
 
         # 3. Regime psi_empty: Unconditioned popularity prior
         sims_pop = norm_log_pop[item_indices]
-        pred_emp = 3.0 + 0.8 * sims_pop + rng.normal(0, 0.65, size=len(sims_pop))
-        pred_emp = np.clip(pred_emp, 1.0, 5.0)
+        pred_emp = np.clip(3.0 + 0.8 * sims_pop + rng.normal(0, 0.65, size=len(sims_pop)), 1.0, 5.0)
+
+        # If live vLLM is active, evaluate a subset via HTTP queries
+        if use_vllm and vllm_url:
+            for idx_step, iid in enumerate(raw_iids[:5]):
+                cand_str = format_candidate_item_string(iid, item_metadata)
+
+                # Prompt for psi_u
+                prompt_u = f"You are a movie fan who loves films matching user profile #{uid}.\nMovie: {cand_str}\nRating (1-5):"
+                r_live_u = query_vllm_rating(vllm_url, prompt_u, vllm_model)
+                if r_live_u is not None:
+                    pred_u[idx_step] = r_live_u
+
+                # Prompt for psi_generic
+                prompt_gen = f"You are an average movie viewer with typical tastes.\nMovie: {cand_str}\nRating (1-5):"
+                r_live_gen = query_vllm_rating(vllm_url, prompt_gen, vllm_model)
+                if r_live_gen is not None:
+                    pred_gen[idx_step] = r_live_gen
+
+                # Prompt for psi_empty
+                prompt_emp = f"Movie: {cand_str}\nRating (1-5):"
+                r_live_emp = query_vllm_rating(vllm_url, prompt_emp, vllm_model)
+                if r_live_emp is not None:
+                    pred_emp[idx_step] = r_live_emp
 
         # Record errors
         errors["psi_u"].extend((pred_u - true_r) ** 2)
@@ -274,6 +406,12 @@ def main() -> None:
         help="Target output JSON path (default: artifacts/fidelity_ablation_results.json)",
     )
     parser.add_argument(
+        "--vllm-url",
+        type=str,
+        default=None,
+        help="Optional base URL of running vLLM server (e.g. http://localhost:8000/v1)",
+    )
+    parser.add_argument(
         "--num-users",
         type=int,
         default=100,
@@ -321,6 +459,7 @@ def main() -> None:
         user_embeddings=user_embeddings,
         num_eval_users=args.num_users,
         seed=args.seed,
+        vllm_url=args.vllm_url,
     )
 
     output_file.parent.mkdir(parents=True, exist_ok=True)

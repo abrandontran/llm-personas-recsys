@@ -32,7 +32,7 @@ class MockLLMEnv(RecEnv):
 
     def __init__(
         self,
-        item_embeddings: np.ndarray,
+        item_embeddings: Optional[np.ndarray] = None,
         archetypes: Optional[List[Dict[str, Any]]] = None,
         max_steps: int = 20,
         alpha_retention: float = 0.25,
@@ -41,6 +41,8 @@ class MockLLMEnv(RecEnv):
         dirichlet_eps: float = 0.05,
         temperature: float = 1.0,
         seed: Optional[int] = None,
+        item_embs: Optional[np.ndarray] = None,
+        **kwargs: Any,
     ) -> None:
         """Initializes the Mock LLM Environment.
 
@@ -55,7 +57,15 @@ class MockLLMEnv(RecEnv):
             dirichlet_eps: Mixing proportion for Dirichlet token noise (default: 0.05).
             temperature: Softmax temperature scaling for token logits (default: 1.0).
             seed: Optional integer seed for reproducible random state.
+            item_embs: Optional alias for item_embeddings.
+            **kwargs: Extra parameters ignored for compatibility.
         """
+        if item_embeddings is None:
+            if item_embs is not None:
+                item_embeddings = item_embs
+            else:
+                raise ValueError("Must provide either item_embeddings or item_embs.")
+
         super().__init__(item_embeddings=item_embeddings, seed=seed)
 
         # Default fallback archetype if none provided
@@ -180,12 +190,13 @@ class MockLLMEnv(RecEnv):
         else:
             probs = base_probs
 
-        probs = (probs / np.sum(probs)).astype(np.float32)
+        probs = (probs / np.sum(probs)).astype(np.float64)
+        probs /= np.sum(probs)
 
         # Scale logits with temperature
         logits = (np.log(np.clip(probs, 1e-12, 1.0)) / max(1e-5, self.temperature)).astype(np.float32)
 
-        return logits, probs, expected_rating
+        return logits, probs.astype(np.float32), expected_rating
 
     def step(
         self,
@@ -206,7 +217,10 @@ class MockLLMEnv(RecEnv):
 
         # 2. Token logit generation and discrete rating sampling
         logits, probs, r_bar_t = self.compute_rating_logits(e_it)
-        r_t = int(self.np_random.choice(RATING_VALUES, p=probs))
+        # Double precision normalized probabilities prevent floating point sum != 1.0 error
+        p_sample = np.asarray(probs, dtype=np.float64)
+        p_sample /= np.sum(p_sample)
+        r_t = int(self.np_random.choice(RATING_VALUES, p=p_sample))
 
         # 3. Track consecutive poor recommendations
         if r_t <= 2:
