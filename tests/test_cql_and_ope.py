@@ -131,6 +131,27 @@ class TestCQLAndOPE(unittest.TestCase):
 
             torch.testing.assert_close(q_orig, q_loaded)
 
+    def test_cql_agent_select_action(self):
+        agent = CQLAgent(obs_dim=202, action_dim=32, hidden_dim=256)
+        obs = np.random.randn(202).astype(np.float32)
+
+        # 1. candidate_actions=None (continuous action search over random samples)
+        act_unconstrained = agent.select_action(obs, candidate_actions=None, num_samples=50)
+        self.assertIsInstance(act_unconstrained, np.ndarray)
+        self.assertEqual(act_unconstrained.shape, (32,))
+        self.assertEqual(act_unconstrained.dtype, np.float32)
+        self.assertTrue(np.all(act_unconstrained >= -1.0))
+        self.assertTrue(np.all(act_unconstrained <= 1.0))
+
+        # 2. candidate_actions=candidate_matrix (scoring candidates via Q-network)
+        candidate_matrix = np.random.randn(25, 32).astype(np.float32)
+        act_candidate = agent.select_action(obs, candidate_actions=candidate_matrix)
+        self.assertIsInstance(act_candidate, np.ndarray)
+        self.assertEqual(act_candidate.shape, (32,))
+        self.assertEqual(act_candidate.dtype, np.float32)
+        matches = np.any(np.all(np.isclose(candidate_matrix, act_candidate, atol=1e-6), axis=1))
+        self.assertTrue(matches, "Selected action must match one of the candidate actions in candidate_matrix")
+
     def test_snips_estimator(self):
         # 2 trajectories, lengths 2 and 2
         rewards = [[1.0, 0.5], [0.8, -0.2]]
@@ -321,6 +342,23 @@ class TestCQLAndOPE(unittest.TestCase):
             gamma=0.99,
         )
         self.assertIsInstance(v_dr, float)
+
+    def test_doubly_robust_leading_empty_trajectories(self):
+        item_embs = np.eye(4, 32, dtype=np.float32)
+        trajectories = [
+            [],  # Leading empty trajectory
+            [
+                {"obs": np.zeros(202), "action": item_embs[0], "reward": 1.0, "importance_weight": 1.5},
+            ],
+        ]
+        mock_q = lambda o, a: 0.5
+        v_dr = evaluate_doubly_robust(
+            eval_trajectories=trajectories,
+            eval_policy_fn=lambda o: item_embs[0],
+            q_model=mock_q,
+        )
+        self.assertIsInstance(v_dr, float)
+        self.assertGreater(v_dr, 0.0)
 
 
 if __name__ == "__main__":

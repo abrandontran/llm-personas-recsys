@@ -91,7 +91,7 @@ class CQLAgent:
         gamma: float = 0.99,
         tau: float = 0.005,
         alpha_cql: float = 1.0,
-        num_random_actions: int = 1,
+        num_random_actions: int = 10,
         device: Optional[Union[str, torch.device]] = None,
     ) -> None:
         if device is None:

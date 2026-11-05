@@ -14,6 +14,7 @@ import numpy as np
 import torch
 
 
+@torch.no_grad()
 def compute_policy_propensities(
     trajectories: Sequence[Sequence[Union[Dict[str, Any], Sequence[Any]]]],
     policy_fn: Callable[[np.ndarray], np.ndarray],
@@ -139,6 +140,7 @@ def compute_snips_score(
     return float(numerator / denominator)
 
 
+@torch.no_grad()
 def evaluate_snips(
     eval_trajectories: Sequence[Sequence[Union[Dict[str, Any], Sequence[Any]]]],
     eval_policy: Callable[[np.ndarray], np.ndarray],
@@ -167,7 +169,7 @@ def evaluate_snips(
         return 0.0
 
     # Check if first transition already contains importance weights
-    first_step = eval_trajectories[0][0] if (len(eval_trajectories) > 0 and len(eval_trajectories[0]) > 0) else None
+    first_step = next((t[0] for t in eval_trajectories if len(t) > 0), None)
     has_weights = False
     if isinstance(first_step, dict):
         has_weights = ("importance_weight" in first_step or "rho" in first_step)
@@ -206,6 +208,7 @@ def evaluate_snips(
     )
 
 
+@torch.no_grad()
 def evaluate_doubly_robust(
     eval_trajectories: Sequence[Sequence[Union[Dict[str, Any], Sequence[Any]]]],
     eval_policy_fn: Callable[[np.ndarray], np.ndarray],
@@ -240,7 +243,7 @@ def evaluate_doubly_robust(
         return 0.0
 
     # Check if importance weights are already present
-    first_step = eval_trajectories[0][0] if (len(eval_trajectories[0]) > 0) else None
+    first_step = next((t[0] for t in eval_trajectories if len(t) > 0), None)
     has_weights = False
     if isinstance(first_step, dict):
         has_weights = ("importance_weight" in first_step or "rho" in first_step)
@@ -312,6 +315,7 @@ def evaluate_doubly_robust(
     return float(total_dr_value / m_trajectories)
 
 
+@torch.no_grad()
 def evaluate_kuairec_zeroshot(
     policy: Any,
     kuairec_embs: np.ndarray,
