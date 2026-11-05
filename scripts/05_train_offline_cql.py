@@ -27,9 +27,11 @@ os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.metrics.ope import (
+    compute_policy_propensities,
     compute_snips_score,
     evaluate_doubly_robust,
     evaluate_kuairec_zeroshot,
+    evaluate_snips,
 )
 from src.models.cql import CQLAgent
 from src.models.sac import SACAgent
@@ -259,58 +261,6 @@ def build_eval_trajectories(
     return trajectories
 
 
-def compute_policy_propensities(
-    trajectories: List[List[Dict[str, Any]]],
-    policy_fn: Callable[[np.ndarray], np.ndarray],
-    item_embeddings: np.ndarray,
-    tau_pi: float = 0.1,
-    num_subsample_items: int = 500,
-) -> Tuple[List[List[float]], List[List[float]]]:
-    """Computes importance weights rho_{m, t} = pi_e(a_{m, t} | o_{m, t}) / pi_b(a_{m, t} | o_{m, t}).
-
-    Uses Boltzmann softmax distribution over catalog embeddings.
-    """
-    embs = item_embeddings
-    num_items = embs.shape[0]
-    pi_b_val = 1.0 / float(num_items)
-
-    traj_rewards: List[List[float]] = []
-    traj_weights: List[List[float]] = []
-
-    for traj in trajectories:
-        r_list: List[float] = []
-        w_list: List[float] = []
-
-        for step in traj:
-            obs = step["obs"]
-            target_idx = step["item_idx"]
-            reward = step["reward"]
-
-            # Policy continuous action vector
-            action = policy_fn(obs)
-            action = np.asarray(action, dtype=np.float32).reshape(-1)
-            norm = float(np.linalg.norm(action)) + 1e-8
-            a_norm = action / norm
-
-            # Boltzmann distribution: logits = embs @ a_norm / tau_pi
-            # Fast vectorized dot product
-            logits = (embs @ a_norm) / tau_pi
-            max_logit = float(np.max(logits))
-            exp_logits = np.exp(logits - max_logit)
-            sum_exp = float(np.sum(exp_logits))
-            pi_e_val = float(exp_logits[target_idx] / max(1e-12, sum_exp))
-
-            # Importance weight rho = pi_e / pi_b
-            rho = float(pi_e_val / max(1e-12, pi_b_val))
-            rho = min(max(rho, 0.0), 20.0)
-
-            r_list.append(reward)
-            w_list.append(rho)
-
-        traj_rewards.append(r_list)
-        traj_weights.append(w_list)
-
-    return traj_rewards, traj_weights
 
 
 def main() -> None:
@@ -537,25 +487,19 @@ def main() -> None:
     ope_results: Dict[str, Dict[str, float]] = {}
 
     for name, p_fn in eval_policies.items():
-        r_list, w_list = compute_policy_propensities(
-            eval_trajectories, p_fn, item_embeddings, tau_pi=0.1
+        snips_val = evaluate_snips(
+            eval_trajectories=eval_trajectories,
+            eval_policy=p_fn,
+            item_embeddings=item_embeddings,
+            tau_pi=0.1,
+            gamma=args.gamma,
         )
-        snips_val = compute_snips_score(r_list, w_list, gamma=args.gamma)
-
-        # Inject importance weights into trajectories for DR evaluation
-        dr_trajs: List[List[Dict[str, Any]]] = []
-        for traj_idx, traj in enumerate(eval_trajectories):
-            new_traj = []
-            for step_idx, step in enumerate(traj):
-                step_copy = dict(step)
-                step_copy["importance_weight"] = w_list[traj_idx][step_idx]
-                new_traj.append(step_copy)
-            dr_trajs.append(new_traj)
-
         dr_val = evaluate_doubly_robust(
-            eval_trajectories=dr_trajs,
+            eval_trajectories=eval_trajectories,
             eval_policy_fn=p_fn,
             q_model=agent,
+            item_embeddings=item_embeddings,
+            tau_pi=0.1,
             gamma=args.gamma,
         )
 

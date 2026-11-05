@@ -13,9 +13,11 @@ import torch
 
 from src.models.cql import CQLAgent, CQLModel
 from src.metrics.ope import (
+    compute_policy_propensities,
     compute_snips_score,
     evaluate_doubly_robust,
     evaluate_kuairec_zeroshot,
+    evaluate_snips,
 )
 
 
@@ -247,6 +249,78 @@ class TestCQLAndOPE(unittest.TestCase):
     def test_doubly_robust_empty(self):
         v_empty = evaluate_doubly_robust([], lambda o: np.zeros(32), lambda o, a: 0.0)
         self.assertEqual(v_empty, 0.0)
+
+    def test_evaluate_snips_interface(self):
+        # 1. With pre-computed weights in transition dicts
+        trajectories = [
+            [
+                {"obs": np.zeros(202), "action": np.ones(32), "reward": 1.0, "importance_weight": 1.5},
+                {"obs": np.zeros(202), "action": np.ones(32), "reward": 0.5, "importance_weight": 1.0},
+            ]
+        ]
+        score = evaluate_snips(trajectories, lambda o: np.ones(32), gamma=0.99)
+        self.assertIsInstance(score, float)
+        self.assertGreater(score, 0.0)
+
+        # 2. Without pre-computed weights, using item_embeddings and tau_pi
+        item_embs = np.eye(5, 32, dtype=np.float32)
+        raw_trajectories = [
+            [
+                {"obs": np.zeros(202), "action": item_embs[0], "reward": 1.0, "item_idx": 0},
+                {"obs": np.zeros(202), "action": item_embs[1], "reward": 0.5, "item_idx": 1},
+            ]
+        ]
+        score_auto = evaluate_snips(
+            raw_trajectories,
+            lambda o: item_embs[0],
+            item_embeddings=item_embs,
+            tau_pi=0.2,
+            gamma=0.99,
+        )
+        self.assertIsInstance(score_auto, float)
+        self.assertGreater(score_auto, 0.0)
+
+    def test_compute_policy_propensities_function(self):
+        item_embs = np.eye(4, 32, dtype=np.float32)
+        trajectories = [
+            [
+                {"obs": np.zeros(202), "action": item_embs[0], "reward": 1.2, "item_idx": 0},
+                {"obs": np.zeros(202), "action": item_embs[2], "reward": -0.4, "item_idx": 2},
+            ]
+        ]
+        policy_fn = lambda o: item_embs[0]
+        r_list, w_list = compute_policy_propensities(
+            trajectories=trajectories,
+            policy_fn=policy_fn,
+            item_embeddings=item_embs,
+            tau_pi=0.1,
+            clip_weight=20.0,
+        )
+        self.assertEqual(len(r_list), 1)
+        self.assertEqual(len(w_list), 1)
+        self.assertEqual(r_list[0], [1.2, -0.4])
+        # First step recommended item matches target item (item 0) -> high propensity / weight
+        # Second step target item is item 2, policy recommends item 0 -> low propensity / weight
+        self.assertGreater(w_list[0][0], w_list[0][1])
+
+    def test_doubly_robust_automatic_propensity_calculation(self):
+        item_embs = np.eye(4, 32, dtype=np.float32)
+        raw_trajectories = [
+            [
+                {"obs": np.zeros(202), "action": item_embs[0], "reward": 1.0, "item_idx": 0},
+                {"obs": np.zeros(202), "action": item_embs[1], "reward": 0.5, "item_idx": 1},
+            ]
+        ]
+        mock_q = lambda o, a: 1.0
+        v_dr = evaluate_doubly_robust(
+            eval_trajectories=raw_trajectories,
+            eval_policy_fn=lambda o: item_embs[0],
+            q_model=mock_q,
+            item_embeddings=item_embs,
+            tau_pi=0.1,
+            gamma=0.99,
+        )
+        self.assertIsInstance(v_dr, float)
 
 
 if __name__ == "__main__":
