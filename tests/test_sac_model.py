@@ -123,6 +123,10 @@ class TestSACModel(unittest.TestCase):
             d = False
             agent.replay_buffer.add(o, a, r, o_prime, d)
 
+        # Record weights before update
+        actor_weights_before = [p.clone() for p in agent.actor.parameters()]
+        critic_weights_before = [p.clone() for p in agent.critic.parameters()]
+
         losses = agent.update(batch_size=16)
         self.assertIn("critic_loss", losses)
         self.assertIn("actor_loss", losses)
@@ -133,6 +137,31 @@ class TestSACModel(unittest.TestCase):
         self.assertFalse(np.isnan(losses["actor_loss"]))
         self.assertFalse(np.isnan(losses["alpha_loss"]))
         self.assertGreater(losses["alpha"], 0.0)
+
+        # Verify network parameters actually changed
+        actor_changed = any(
+            not torch.equal(wb, wa)
+            for wb, wa in zip(actor_weights_before, agent.actor.parameters())
+        )
+        critic_changed = any(
+            not torch.equal(wb, wa)
+            for wb, wa in zip(critic_weights_before, agent.critic.parameters())
+        )
+        self.assertTrue(actor_changed, "Actor parameters should change after update")
+        self.assertTrue(critic_changed, "Critic parameters should change after update")
+
+    def test_custom_alpha_initialization(self):
+        """SACAgent respects custom initial alpha value and non-automatic entropy tuning."""
+        agent = SACAgent(
+            obs_dim=self.obs_dim,
+            action_dim=self.act_dim,
+            hidden_dim=self.hidden_dim,
+            alpha=0.2,
+            automatic_entropy_tuning=False,
+        )
+        self.assertAlmostEqual(agent.alpha, 0.2, places=5)
+        self.assertAlmostEqual(float(agent.log_alpha.exp().item()), 0.2, places=5)
+        self.assertFalse(agent.log_alpha.requires_grad)
 
     def test_save_and_load_round_trip(self):
         """SACAgent state dict save and load preserves network weights."""

@@ -313,8 +313,8 @@ def main() -> None:
         next_obs, reward, terminated, truncated, _ = env.step(action)
         done = terminated or truncated
 
-        # Store transition in circular replay buffer
-        agent.replay_buffer.add(obs, action, reward, next_obs, done)
+        # Store transition in circular replay buffer (store true MDP termination, not time-limit truncation)
+        agent.replay_buffer.add(obs, action, reward, next_obs, terminated)
 
         obs = next_obs
         ep_reward += reward

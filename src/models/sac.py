@@ -226,9 +226,15 @@ class SACAgent:
         else:
             self.target_entropy = float(target_entropy)
 
-        self.log_alpha = torch.zeros(1, requires_grad=True, device=self.device)
+        init_log_alpha = float(np.log(max(alpha, 1e-8)))
+        self.log_alpha = torch.tensor(
+            [init_log_alpha],
+            dtype=torch.float32,
+            requires_grad=automatic_entropy_tuning,
+            device=self.device,
+        )
         self.alpha_optimizer = torch.optim.Adam([self.log_alpha], lr=lr)
-        self.alpha = float(self.log_alpha.exp().item())
+        self.alpha = float(alpha)
 
         # Transition buffer
         self.replay_buffer = ReplayBuffer(
@@ -255,8 +261,11 @@ class SACAgent:
         if is_1d:
             obs_tensor = obs_tensor.unsqueeze(0)
 
+        with_logprob = (return_log_prob is not False)
         with torch.no_grad():
-            action, log_prob = self.actor(obs_tensor, deterministic=evaluate)
+            action, log_prob = self.actor(
+                obs_tensor, deterministic=evaluate, with_logprob=with_logprob
+            )
 
         if is_1d:
             action = action.squeeze(0)
@@ -388,7 +397,19 @@ class SACAgent:
             self.alpha = float(self.log_alpha.exp().item())
         if "actor_optimizer" in state:
             self.actor_optimizer.load_state_dict(state["actor_optimizer"])
+            for opt_state in self.actor_optimizer.state.values():
+                for k, v in opt_state.items():
+                    if isinstance(v, torch.Tensor):
+                        opt_state[k] = v.to(self.device)
         if "critic_optimizer" in state:
             self.critic_optimizer.load_state_dict(state["critic_optimizer"])
+            for opt_state in self.critic_optimizer.state.values():
+                for k, v in opt_state.items():
+                    if isinstance(v, torch.Tensor):
+                        opt_state[k] = v.to(self.device)
         if "alpha_optimizer" in state:
             self.alpha_optimizer.load_state_dict(state["alpha_optimizer"])
+            for opt_state in self.alpha_optimizer.state.values():
+                for k, v in opt_state.items():
+                    if isinstance(v, torch.Tensor):
+                        opt_state[k] = v.to(self.device)
