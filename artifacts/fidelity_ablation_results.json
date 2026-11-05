@@ -1,0 +1,50 @@
+{
+  "psi_u": {
+    "name": "Full Persona (\\psi_u)",
+    "rmse": 1.209,
+    "ndcg_at_10": 0.645,
+    "d_js": 0.015,
+    "w1": 0.81,
+    "temporal_consistency": 0.912
+  },
+  "psi_generic": {
+    "name": "Generic Persona (\\psi_{generic})",
+    "rmse": 1.252,
+    "ndcg_at_10": 0.605,
+    "d_js": 0.014,
+    "w1": 0.767,
+    "temporal_consistency": 0.825
+  },
+  "psi_empty": {
+    "name": "Unconditioned (\\psi_\\emptyset)",
+    "rmse": 1.305,
+    "ndcg_at_10": 0.57,
+    "d_js": 0.027,
+    "w1": 0.402,
+    "temporal_consistency": 0.71
+  },
+  "full_persona": {
+    "name": "Full Persona (\\psi_u)",
+    "rmse": 1.209,
+    "ndcg_at_10": 0.645,
+    "d_js": 0.015,
+    "w1": 0.81,
+    "temporal_consistency": 0.912
+  },
+  "generic_persona": {
+    "name": "Generic Persona (\\psi_{generic})",
+    "rmse": 1.252,
+    "ndcg_at_10": 0.605,
+    "d_js": 0.014,
+    "w1": 0.767,
+    "temporal_consistency": 0.825
+  },
+  "unconditioned": {
+    "name": "Unconditioned (\\psi_\\emptyset)",
+    "rmse": 1.305,
+    "ndcg_at_10": 0.57,
+    "d_js": 0.027,
+    "w1": 0.402,
+    "temporal_consistency": 0.71
+  }
+}

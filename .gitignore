@@ -27,6 +27,8 @@ dist/
 *.zip
 *.parquet
 *.h5
+*.pkl
+*.npy
 
 # Model weights & large binary checkpoints
 checkpoints/

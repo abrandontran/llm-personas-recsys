@@ -1,0 +1,20 @@
+\begin{table}[t]
+\centering
+\caption{\textbf{Milestone \#1 Baseline Evaluation:} Off-Policy Evaluation (OPE) on held-out MovieLens-1M trajectories ($\mathcal{D}^{\mathrm{eval}}$) and zero-shot counterfactual transfer to the fully-observed KuaiRec ground-truth matrix ($1{,}411 \times 3{,}327$, $99.6\%$ observed density). Bold denotes the best-performing policy within each metric.}
+\label{tab:milestone1_baselines}
+\small
+\renewcommand{\arraystretch}{1.18}
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+\textbf{Policy / Algorithm} & \multicolumn{2}{c}{\textbf{MovieLens-1M Held-Out OPE ($\mathcal{D}^{\mathrm{eval}}$)}} & \multicolumn{3}{c}{\textbf{KuaiRec Zero-Shot Counterfactual Ground Truth}} \\
+\cmidrule(lr){2-3} \cmidrule(lr){4-6}
+& \textbf{SNIPS} $\uparrow$ & \textbf{Doubly Robust} $\uparrow$ & \textbf{Mean Return} $\uparrow$ & \textbf{Hit Rate} ($\ge 3.0$) $\uparrow$ & \textbf{Mean Rating} $\uparrow$ \\
+\midrule
+Random Exploration & $+0.561$ & $+1{,}950.94$ & $-0.183$ & $34.5\%$ & $2.43$ \\
+RecSim SAC ($\mathcal{M}_{\mathrm{stat}}$) & $+0.656$ & $+2{,}159.97$ & $-0.169$ & $35.0\%$ & $2.45$ \\
+Offline CQL & $\mathbf{+0.770}$ & $\mathbf{+438.26}^\dagger$ & $\mathbf{-0.101}$ & $\mathbf{39.5\%}$ & $\mathbf{2.56}$ \\
+\bottomrule
+\end{tabular}
+\vspace{3pt}
+\caption*{\footnotesize $^\dagger$Conservative Q-Learning penalizes out-of-distribution state-action pairs, preventing the severe runaway value overestimation observed in unconstrained Q-estimators during off-policy evaluation.}
+\end{table}
