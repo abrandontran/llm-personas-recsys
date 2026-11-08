@@ -4,7 +4,9 @@
 # Bucket 6: HPC Bridge & In Silico LLM Environment Backend
 # ==============================================================================
 #SBATCH --job-name=vllm_llama3
-#SBATCH --partition=gpu
+#SBATCH --account=sds6190
+#SBATCH --partition=education_gpu
+#SBATCH --qos=normal
 #SBATCH --gpus=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
@@ -18,7 +20,7 @@ echo "=========================================================="
 echo "Starting vLLM Inference Server on Yale Bouchet HPC Cluster"
 echo "Job ID:        ${SLURM_JOB_ID:-local}"
 echo "Node:          $(hostname)"
-echo "Partition:     gpu"
+echo "Partition:     ${SLURM_JOB_PARTITION:-education_gpu}"
 echo "Start Time:    $(date)"
 echo "=========================================================="
 

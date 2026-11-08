@@ -46,7 +46,7 @@ REQUIRED_SLURM_SCRIPTS: List[str] = [
 
 # Essential Slurm directives to check in batch scripts
 REQUIRED_SLURM_DIRECTIVES: List[str] = [
-    "#SBATCH --partition=gpu",
+    "#SBATCH --partition",
     "#SBATCH --cpus-per-task",
     "#SBATCH --mem",
     "#SBATCH --time",
