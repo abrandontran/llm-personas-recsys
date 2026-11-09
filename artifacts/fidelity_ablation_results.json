@@ -18,7 +18,7 @@
   "psi_empty": {
     "name": "Unconditioned (\\psi_\\emptyset)",
     "rmse": 1.305,
-    "ndcg_at_10": 0.57,
+    "ndcg_at_10": 0.571,
     "d_js": 0.027,
     "w1": 0.402,
     "temporal_consistency": 0.71
@@ -42,7 +42,7 @@
   "unconditioned": {
     "name": "Unconditioned (\\psi_\\emptyset)",
     "rmse": 1.305,
-    "ndcg_at_10": 0.57,
+    "ndcg_at_10": 0.571,
     "d_js": 0.027,
     "w1": 0.402,
     "temporal_consistency": 0.71
